@@ -1,0 +1,36 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+# Secrets / local config
+.env
+
+# Data artifacts (regenerated — never committed; and no real health data, ever)
+data/synthea/*
+!data/synthea/.gitkeep
+data/fhir/
+data/*.duckdb
+data/*.duckdb.wal
+
+# dbt
+target/
+dbt_packages/
+logs/
+**/.user.yml
+
+# tooling
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.DS_Store
+
+
+#journal 
+journaldebord.md 

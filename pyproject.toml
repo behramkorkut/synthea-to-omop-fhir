@@ -1,0 +1,21 @@
+[project]
+name = "synthea-omop-fhir"
+version = "0.1.0"
+description = "Synthea -> OMOP CDM -> FHIR: a governed, sovereign health-data pipeline (research + interoperability)."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "dbt-duckdb>=1.10.1",
+    "duckdb>=1.5.4",
+    "fhir-resources>=8.3.0",
+    "pandas>=2.3.3",
+    "pandera[pandas]>=0.32.1",
+    "pydantic-settings>=2.14.2",
+]
+
+[dependency-groups]
+dev = [
+    "mypy>=1.19.1",
+    "pytest>=9.1.1",
+    "ruff>=0.15.20",
+]
