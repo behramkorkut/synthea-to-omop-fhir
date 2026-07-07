@@ -1,0 +1,13 @@
+version: 2
+
+sources:
+  - name: bronze
+    description: "Raw Synthea CSV export, loaded by load_bronze.py (all VARCHAR)."
+    schema: bronze
+    tables:
+      - name: patients
+      - name: encounters
+      - name: conditions
+      - name: medications
+      - name: procedures
+      - name: observations

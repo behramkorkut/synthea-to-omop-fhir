@@ -1,0 +1,23 @@
+name: "omop_cdm"
+version: "1.0.0"
+config-version: 2
+
+profile: "omop_cdm"
+
+model-paths: ["models"]
+macro-paths: ["macros"]
+seed-paths: ["seeds"]
+test-paths: ["tests"]
+
+target-path: "target"
+clean-targets: ["target", "dbt_packages"]
+
+# staging = Silver (views), omop = the OMOP CDM tables (materialized).
+models:
+  omop_cdm:
+    staging:
+      +materialized: view
+      +schema: staging
+    marts:
+      +materialized: table
+      +schema: omop

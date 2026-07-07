@@ -1,0 +1,10 @@
+# dbt connection profile. Run with:  dbt build --profiles-dir .
+# Reads/writes the SAME DuckDB file the bronze loader wrote (WAREHOUSE_DB).
+omop_cdm:
+  target: dev
+  outputs:
+    dev:
+      type: duckdb
+      path: "{{ env_var('WAREHOUSE_DB', 'data/omop.duckdb') }}"
+      schema: main
+      threads: 4

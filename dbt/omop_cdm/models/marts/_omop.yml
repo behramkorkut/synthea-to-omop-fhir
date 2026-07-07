@@ -1,0 +1,108 @@
+version: 2
+
+models:
+  - name: person
+    description: "OMOP CDM PERSON."
+    columns:
+      - name: person_id
+        data_tests: [not_null, unique]
+      - name: gender_concept_id
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [8507, 8532, 0]
+      - name: person_source_value
+        data_tests: [not_null, unique]
+
+  - name: death
+    columns:
+      - name: person_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('person')
+                field: person_id
+
+  - name: observation_period
+    columns:
+      - name: observation_period_id
+        data_tests: [not_null, unique]
+      - name: person_id
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('person')
+                field: person_id
+
+  - name: visit_occurrence
+    columns:
+      - name: visit_occurrence_id
+        data_tests: [not_null, unique]
+      - name: person_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('person')
+                field: person_id
+      - name: visit_concept_id
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [9201, 9202, 9203]
+
+  - name: condition_occurrence
+    columns:
+      - name: condition_occurrence_id
+        data_tests: [not_null, unique]
+      - name: person_id
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('person')
+                field: person_id
+
+  - name: drug_exposure
+    columns:
+      - name: drug_exposure_id
+        data_tests: [not_null, unique]
+      - name: person_id
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('person')
+                field: person_id
+
+  - name: procedure_occurrence
+    columns:
+      - name: procedure_occurrence_id
+        data_tests: [not_null, unique]
+      - name: person_id
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('person')
+                field: person_id
+
+  - name: measurement
+    columns:
+      - name: measurement_id
+        data_tests: [not_null, unique]
+      - name: person_id
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('person')
+                field: person_id
+
+  - name: observation
+    columns:
+      - name: observation_id
+        data_tests: [not_null, unique]
+      - name: person_id
+        data_tests:
+          - relationships:
+              arguments:
+                to: ref('person')
+                field: person_id
