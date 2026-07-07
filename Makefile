@@ -8,7 +8,7 @@ export DBT_PROFILES_DIR := $(ROOT)/dbt/omop_cdm
 DBT  := uv run dbt
 PROJ := --project-dir dbt/omop_cdm --profiles-dir dbt/omop_cdm
 
-.PHONY: help setup synthea bronze omop quality fhir-export fhir-server \
+.PHONY: help setup synthea bronze omop quality fhir-export fhir-server fhir-push \
         api dashboard test format lint typecheck check clean
 
 help: ## Show this help
@@ -35,6 +35,9 @@ fhir-export: ## Export a subset of OMOP as FHIR resources
 
 fhir-server: ## Start a HAPI FHIR server (Docker)
 	docker compose -f docker/hapi-fhir.yml up -d
+
+fhir-push: ## Load the FHIR bundle into the running HAPI server
+	uv run python -m synthea_omop_fhir.fhir.push
 
 api: ## Serve the cohort / FHIR facade API (FastAPI)
 	uv run uvicorn synthea_omop_fhir.api.main:app --reload --port 8000
