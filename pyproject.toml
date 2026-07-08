@@ -5,6 +5,7 @@ description = "Synthea -> OMOP CDM -> FHIR: a governed, sovereign health-data pi
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
+    "anthropic>=0.116.0",
     "dbt-duckdb>=1.10.1",
     "duckdb>=1.5.4",
     "fastapi>=0.139.0",

@@ -9,7 +9,7 @@ DBT  := uv run dbt
 PROJ := --project-dir dbt/omop_cdm --profiles-dir dbt/omop_cdm
 
 .PHONY: help setup synthea bronze omop quality fhir-export fhir-server fhir-push \
-        api dashboard test format lint typecheck check clean
+        api ask dashboard test format lint typecheck check clean
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -41,6 +41,9 @@ fhir-push: ## Load the FHIR bundle into the running HAPI server
 
 api: ## Serve the cohort / FHIR facade API (FastAPI)
 	uv run uvicorn synthea_omop_fhir.api.main:app --reload --port 8000
+
+ask: ## Ask the governed clinical agent, e.g. make ask Q="patients with breast cancer?"
+	uv run python -m synthea_omop_fhir.agent.cli "$(Q)"
 
 dashboard: ## Launch the cohort explorer (Streamlit)
 	uv run streamlit run app.py
