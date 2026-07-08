@@ -9,7 +9,7 @@ DBT  := uv run dbt
 PROJ := --project-dir dbt/omop_cdm --profiles-dir dbt/omop_cdm
 
 .PHONY: help setup synthea bronze omop quality fhir-export fhir-server fhir-push \
-        api ask dashboard test format lint typecheck check clean
+        api ask dashboard test format lint typecheck check docker-up docker-down clean
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | \
@@ -61,6 +61,12 @@ typecheck: ## Static type-check (mypy)
 	uv run mypy synthea_omop_fhir
 
 check: lint test ## Quality gates: lint + tests
+
+docker-up: ## Build + run the full stack (API + dashboard + HAPI FHIR)
+	docker compose up --build
+
+docker-down: ## Stop the stack (keeps volumes)
+	docker compose down
 
 clean: ## Remove generated artifacts
 	rm -rf data/synthea/csv data/fhir data/*.duckdb data/*.duckdb.wal \

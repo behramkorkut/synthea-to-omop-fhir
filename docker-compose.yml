@@ -1,0 +1,48 @@
+# Full stack in one command:  docker compose up --build
+# (Build the OMOP warehouse first with `make bronze && make omop`, or mount the
+#  Synthea CSVs in ./data/synthea/csv so the container builds it on boot.)
+services:
+  api:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    image: synthea-omop-fhir
+    container_name: sof-api
+    command: ["api"]
+    ports:
+      - "8000:8000"
+    environment:
+      WAREHOUSE_DB: /app/data/omop.duckdb
+    volumes:
+      - ./data:/app/data
+    networks:
+      - sof-net
+
+  dashboard:
+    image: synthea-omop-fhir            # reuses the image built by `api`
+    container_name: sof-dashboard
+    command: ["dashboard"]
+    ports:
+      - "8501:8501"
+    environment:
+      WAREHOUSE_DB: /app/data/omop.duckdb
+    volumes:
+      - ./data:/app/data
+    depends_on:
+      - api
+    networks:
+      - sof-net
+
+  hapi-fhir:
+    image: hapiproject/hapi:latest
+    container_name: sof-hapi-fhir
+    ports:
+      - "8080:8080"
+    environment:
+      hapi.fhir.fhir_version: R4
+    networks:
+      - sof-net
+
+networks:
+  sof-net:
+    driver: bridge
