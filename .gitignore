@@ -34,3 +34,6 @@ logs/
 
 #journal 
 journaldebord.md 
+audit_projet/
+audit_projet/* 
+progress.txt

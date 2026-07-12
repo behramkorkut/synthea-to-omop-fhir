@@ -2,7 +2,7 @@
 
 We read OMOP tables from DuckDB and build validated FHIR resources
 (Patient, Encounter, Condition, Observation) with `fhir.resources`, then
-assemble a FHIR **transaction Bundle** (PUT with client-assigned ids, so
+assemble a FHIR **transaction Bundle** (POST with urn:uuid refs, so
 references resolve on ingest). Load it into HAPI FHIR with `make fhir-push`.
 
 Run:  uv run python -m synthea_omop_fhir.fhir.export [n_patients]
@@ -63,7 +63,7 @@ def build_bundle(con: duckdb.DuckDBPyConnection, n_patients: int) -> dict:
         "day_of_birth, person_source_value FROM person ORDER BY person_id LIMIT ?",
         [n_patients],
     ).fetchall()
-    ids = [str(r[0]) for r in persons]
+    ids = [r[0] for r in persons]
 
     patient_urn: dict[int, str] = {}
     for pid, gender, y, m, d, src in persons:
@@ -75,12 +75,12 @@ def build_bundle(con: duckdb.DuckDBPyConnection, n_patients: int) -> dict:
 
     if not ids:
         return {"resourceType": "Bundle", "type": "transaction", "entry": entries}
-    ph = ",".join(ids)
 
     # --- encounters (reference the Patient by its urn:uuid) -------------
     for pid, start, end, vc in con.execute(
-        f"SELECT person_id, visit_start_date, visit_end_date, visit_concept_id "
-        f"FROM visit_occurrence WHERE person_id IN ({ph})"
+        "SELECT person_id, visit_start_date, visit_end_date, visit_concept_id "
+        "FROM visit_occurrence WHERE person_id IN (SELECT UNNEST(?))",
+        [ids],
     ).fetchall():
         add(_validated(Encounter, {
             "status": "finished",
@@ -92,8 +92,9 @@ def build_bundle(con: duckdb.DuckDBPyConnection, n_patients: int) -> dict:
 
     # --- conditions (SNOMED source code) --------------------------------
     for pid, code, onset in con.execute(
-        f"SELECT person_id, condition_source_value, condition_start_date "
-        f"FROM condition_occurrence WHERE person_id IN ({ph})"
+        "SELECT person_id, condition_source_value, condition_start_date "
+        "FROM condition_occurrence WHERE person_id IN (SELECT UNNEST(?))",
+        [ids],
     ).fetchall():
         add(_validated(Condition, {
             "clinicalStatus": {"coding": [{
@@ -106,9 +107,10 @@ def build_bundle(con: duckdb.DuckDBPyConnection, n_patients: int) -> dict:
 
     # --- measurements -> Observation (LOINC source code) ----------------
     for pid, code, when, val, unit in con.execute(
-        f"SELECT person_id, measurement_source_value, measurement_date, "
-        f"value_as_number, unit_source_value FROM measurement "
-        f"WHERE person_id IN ({ph}) AND value_as_number IS NOT NULL LIMIT {MAX_OBSERVATIONS}"
+        "SELECT person_id, measurement_source_value, measurement_date, "
+        "value_as_number, unit_source_value FROM measurement "
+        "WHERE person_id IN (SELECT UNNEST(?)) AND value_as_number IS NOT NULL LIMIT ?",
+        [ids, MAX_OBSERVATIONS],
     ).fetchall():
         add(_validated(Observation, {
             "status": "final",

@@ -37,6 +37,8 @@ After a tool returns, answer concisely in the SAME LANGUAGE as the user, citing
 the exact figures, and remind that the data is synthetic when relevant.
 """
 
+
+
 # The governed tools = the cohort operations. No free-form SQL is ever exposed.
 TOOLS = [
     {

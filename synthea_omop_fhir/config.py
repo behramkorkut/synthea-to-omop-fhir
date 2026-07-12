@@ -34,9 +34,17 @@ class Settings(BaseSettings):
     # --- FHIR server (HAPI FHIR, run via Docker) -------------------------
     fhir_base_url: str = "http://localhost:8080/fhir"
 
-    # --- LLM (governed clinical agent, added in a later phase) -----------
+    # --- API security ----------------------------------------------------
+    api_key: str = ""                         # empty = no auth (demo mode)
+    rate_limit_per_minute: int = 0             # 0 = disabled
+
+    # --- LLM (governed clinical agent) ------------------------------------
+    llm_provider: str = "anthropic"            # anthropic | openai
     anthropic_api_key: str = ""
     anthropic_model: str = "claude-sonnet-4-6"
+    openai_api_key: str = ""
+    openai_model: str = "gpt-4o"
+    llm_base_url: str = ""                     # for local / proxy endpoints
 
     @property
     def warehouse_db_abs(self) -> Path:

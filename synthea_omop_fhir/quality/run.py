@@ -1,0 +1,287 @@
+"""Health-grade data-quality checks over the OMOP CDM (Pandera + DuckDB).
+
+Inspired by OHDSI DataQualityDashboard (DQD): validate types, nullability,
+business coherence, and mapping coverage. Run:
+
+    uv run python -m synthea_omop_fhir.quality.run
+"""
+
+from __future__ import annotations
+
+import json
+import sys
+from dataclasses import asdict, dataclass, field
+from datetime import date
+
+import duckdb
+import pandas as pd
+import pandera as pa
+from pandera import Column, DataFrameSchema
+
+from ..config import settings
+
+
+@dataclass
+class CheckResult:
+    name: str
+    table: str
+    passed: bool
+    n_violations: int = 0
+    details: list[str] = field(default_factory=list)
+
+
+@dataclass
+class QualityReport:
+    passed: bool
+    checks: list[CheckResult]
+    summary: dict
+
+
+# ---------------------------------------------------------------------------
+# Pandera schemas — OMOP CDM column contracts
+# ---------------------------------------------------------------------------
+
+PERSON_SCHEMA = DataFrameSchema(
+    {
+        "person_id": Column(int, nullable=False, unique=True),
+        "gender_concept_id": Column(int, nullable=False, isin=[8507, 8532, 0]),
+        "year_of_birth": Column(int, nullable=False),
+        "month_of_birth": Column(int, nullable=True, isin=list(range(1, 13))),
+        "day_of_birth": Column(int, nullable=True, isin=list(range(1, 32))),
+        "person_source_value": Column(str, nullable=False),
+    },
+    strict=False,
+)
+
+VISIT_SCHEMA = DataFrameSchema(
+    {
+        "visit_occurrence_id": Column(int, nullable=False, unique=True),
+        "person_id": Column(int, nullable=False),
+        "visit_concept_id": Column(int, nullable=False, isin=[9201, 9202, 9203]),
+        "visit_start_date": Column(pa.Date, nullable=False),
+        "visit_end_date": Column(pa.Date, nullable=True),
+    },
+    strict=False,
+)
+
+CONDITION_SCHEMA = DataFrameSchema(
+    {
+        "condition_occurrence_id": Column(int, nullable=False, unique=True),
+        "person_id": Column(int, nullable=False),
+        "condition_start_date": Column(pa.Date, nullable=False),
+        "condition_end_date": Column(pa.Date, nullable=True),
+    },
+    strict=False,
+)
+
+MEASUREMENT_SCHEMA = DataFrameSchema(
+    {
+        "measurement_id": Column(int, nullable=False, unique=True),
+        "person_id": Column(int, nullable=False),
+        "measurement_date": Column(pa.Date, nullable=False),
+        "value_as_number": Column(float, nullable=True),
+    },
+    strict=False,
+)
+
+DRUG_SCHEMA = DataFrameSchema(
+    {
+        "drug_exposure_id": Column(int, nullable=False, unique=True),
+        "person_id": Column(int, nullable=False),
+        "drug_exposure_start_date": Column(pa.Date, nullable=False),
+        "drug_exposure_end_date": Column(pa.Date, nullable=True),
+    },
+    strict=False,
+)
+
+SCHEMAS: dict[str, DataFrameSchema] = {
+    "person": PERSON_SCHEMA,
+    "visit_occurrence": VISIT_SCHEMA,
+    "condition_occurrence": CONDITION_SCHEMA,
+    "measurement": MEASUREMENT_SCHEMA,
+    "drug_exposure": DRUG_SCHEMA,
+}
+
+
+# ---------------------------------------------------------------------------
+# Custom coherence checks (beyond Pandera schemas)
+# ---------------------------------------------------------------------------
+
+def _check_death_after_birth(con: duckdb.DuckDBPyConnection) -> CheckResult:
+    rows = con.execute(
+        "SELECT person_id FROM omop.person p "
+        "JOIN omop.death d USING (person_id) "
+        "WHERE d.death_date < p.birth_datetime"
+    ).fetchall()
+    return CheckResult(
+        name="death_after_birth",
+        table="death",
+        passed=len(rows) == 0,
+        n_violations=len(rows),
+        details=[f"person_id={r[0]}" for r in rows[:5]],
+    )
+
+
+def _check_visit_end_after_start(con: duckdb.DuckDBPyConnection) -> CheckResult:
+    rows = con.execute(
+        "SELECT visit_occurrence_id FROM omop.visit_occurrence "
+        "WHERE visit_end_date IS NOT NULL AND visit_end_date < visit_start_date"
+    ).fetchall()
+    return CheckResult(
+        name="visit_end_after_start",
+        table="visit_occurrence",
+        passed=len(rows) == 0,
+        n_violations=len(rows),
+        details=[f"visit_occurrence_id={r[0]}" for r in rows[:5]],
+    )
+
+
+def _check_condition_end_after_start(con: duckdb.DuckDBPyConnection) -> CheckResult:
+    rows = con.execute(
+        "SELECT condition_occurrence_id FROM omop.condition_occurrence "
+        "WHERE condition_end_date IS NOT NULL AND condition_end_date < condition_start_date"
+    ).fetchall()
+    return CheckResult(
+        name="condition_end_after_start",
+        table="condition_occurrence",
+        passed=len(rows) == 0,
+        n_violations=len(rows),
+        details=[f"condition_occurrence_id={r[0]}" for r in rows[:5]],
+    )
+
+
+def _check_drug_end_after_start(con: duckdb.DuckDBPyConnection) -> CheckResult:
+    rows = con.execute(
+        "SELECT drug_exposure_id FROM omop.drug_exposure "
+        "WHERE drug_exposure_end_date IS NOT NULL AND drug_exposure_end_date < drug_exposure_start_date"
+    ).fetchall()
+    return CheckResult(
+        name="drug_end_after_start",
+        table="drug_exposure",
+        passed=len(rows) == 0,
+        n_violations=len(rows),
+        details=[f"drug_exposure_id={r[0]}" for r in rows[:5]],
+    )
+
+
+def _check_measurement_positive_value(con: duckdb.DuckDBPyConnection) -> CheckResult:
+    """Some measurements (height, weight) should be positive."""
+    rows = con.execute(
+        "SELECT measurement_id FROM omop.measurement "
+        "WHERE value_as_number IS NOT NULL AND value_as_number <= 0"
+    ).fetchall()
+    return CheckResult(
+        name="measurement_positive_value",
+        table="measurement",
+        passed=len(rows) == 0,
+        n_violations=len(rows),
+        details=[f"measurement_id={r[0]}" for r in rows[:5]],
+    )
+
+
+# ---------------------------------------------------------------------------
+# Mapping coverage check (concept_id = 0)
+# ---------------------------------------------------------------------------
+
+def _check_mapping_coverage(con: duckdb.DuckDBPyConnection) -> CheckResult:
+    """Report % of records with unmapped concept_id (= 0)."""
+    tables = [
+        ("person", "gender_concept_id"),
+        ("visit_occurrence", "visit_concept_id"),
+        ("condition_occurrence", "condition_concept_id"),
+        ("drug_exposure", "drug_concept_id"),
+        ("measurement", "measurement_concept_id"),
+        ("procedure_occurrence", "procedure_concept_id"),
+        ("observation", "observation_concept_id"),
+    ]
+    details: list[str] = []
+    total_zero = 0
+    total_rows = 0
+    for table, col in tables:
+        try:
+            n_total, n_zero = con.execute(
+                f"SELECT count(*), count(*) FILTER (WHERE {col} = 0) FROM omop.{table}"
+            ).fetchone()
+            total_rows += n_total
+            total_zero += n_zero
+            pct = (n_zero / n_total * 100) if n_total else 0
+            details.append(f"{table}.{col}: {n_zero}/{n_total} unmapped ({pct:.1f}%)")
+        except duckdb.CatalogException:
+            details.append(f"{table}.{col}: table or column not found — skipped")
+    overall_pct = (total_zero / total_rows * 100) if total_rows else 0
+    # We consider it a warning, not a hard failure (mapping is external).
+    return CheckResult(
+        name="mapping_coverage",
+        table="omop",
+        passed=True,  # informational
+        n_violations=total_zero,
+        details=details + [f"OVERALL unmapped: {total_zero}/{total_rows} ({overall_pct:.1f}%)"],
+    )
+
+
+# ---------------------------------------------------------------------------
+# Main runner
+# ---------------------------------------------------------------------------
+
+def _load_df(con: duckdb.DuckDBPyConnection, table: str) -> pd.DataFrame:
+    return con.execute(f"SELECT * FROM omop.{table}").fetchdf()
+
+
+def run() -> QualityReport:
+    db_path = settings.warehouse_db_abs
+    if not db_path.exists():
+        raise FileNotFoundError(f"OMOP warehouse not found at {db_path}. Run `make omop` first.")
+
+    con = duckdb.connect(str(db_path))
+    con.execute("USE omop.omop")
+
+    checks: list[CheckResult] = []
+
+    # --- Pandera schema checks ---
+    for table, schema in SCHEMAS.items():
+        try:
+            df = _load_df(con, table)
+            if df.empty:
+                checks.append(CheckResult(name=f"schema_{table}", table=table, passed=True, details=["empty table"]))
+                continue
+            validated = schema.validate(df, lazy=True)
+            checks.append(CheckResult(name=f"schema_{table}", table=table, passed=True, n_violations=0))
+        except pa.errors.SchemaErrors as exc:
+            details = [f"{err['column']}: {err['check']} — {err['failure_cases']}" for err in exc.schema_errors[:5]]
+            checks.append(CheckResult(
+                name=f"schema_{table}", table=table, passed=False,
+                n_violations=len(exc.schema_errors), details=details,
+            ))
+        except Exception as exc:
+            checks.append(CheckResult(name=f"schema_{table}", table=table, passed=False, details=[str(exc)]))
+
+    # --- Coherence checks ---
+    checks.append(_check_death_after_birth(con))
+    checks.append(_check_visit_end_after_start(con))
+    checks.append(_check_condition_end_after_start(con))
+    checks.append(_check_drug_end_after_start(con))
+    checks.append(_check_measurement_positive_value(con))
+
+    # --- Mapping coverage ---
+    checks.append(_check_mapping_coverage(con))
+
+    con.close()
+
+    passed = all(c.passed for c in checks)
+    summary = {
+        "total_checks": len(checks),
+        "passed": sum(1 for c in checks if c.passed),
+        "failed": sum(1 for c in checks if not c.passed),
+        "total_violations": sum(c.n_violations for c in checks),
+    }
+    return QualityReport(passed=passed, checks=checks, summary=summary)
+
+
+def main() -> None:
+    report = run()
+    print(json.dumps(asdict(report), indent=2, default=str))
+    sys.exit(0 if report.passed else 1)
+
+
+if __name__ == "__main__":
+    main()
