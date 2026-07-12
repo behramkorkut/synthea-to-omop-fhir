@@ -1,6 +1,6 @@
-"""Governed clinical cohort agent.
+"""Governed clinical cohort agent (LLM-agnostic).
 
-Claude answers clinical questions ("how many female patients with breast
+Claude / GPT answers clinical questions ("how many female patients with breast
 cancer?") ONLY by calling a small set of governed cohort tools. It never writes
 SQL and never sees raw patient rows — it selects an operation + parameters, we
 validate them, and the parameterized (read-only) cohort operation runs.
@@ -13,10 +13,8 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 
-import anthropic
-
 from ..cohort import builder
-from ..config import settings
+from .llm import LLMClient, create_llm_client
 
 MAX_STEPS = 6
 
@@ -36,7 +34,6 @@ Condition and measurement labels use clinical terminology (SNOMED/LOINC), e.g.
 After a tool returns, answer concisely in the SAME LANGUAGE as the user, citing
 the exact figures, and remind that the data is synthetic when relevant.
 """
-
 
 
 # The governed tools = the cohort operations. No free-form SQL is ever exposed.
@@ -106,47 +103,51 @@ class AgentResult:
 
 
 class ClinicalCohortAgent:
-    def __init__(self, client: anthropic.Anthropic | None = None):
-        if client is not None:
-            self.client = client
-        else:
-            if not settings.anthropic_api_key:
-                raise RuntimeError("ANTHROPIC_API_KEY is not set. Add it to your .env.")
-            self.client = anthropic.Anthropic(api_key=settings.anthropic_api_key)
+    """Governed clinical agent that works with any LLMClient (Anthropic, OpenAI, …)."""
+
+    def __init__(self, client: LLMClient | None = None):
+        self._llm = create_llm_client(client=client)
 
     def run(self, question: str) -> AgentResult:
         messages: list[dict] = [{"role": "user", "content": question}]
         result = AgentResult(answer="")
 
         for _ in range(MAX_STEPS):
-            resp = self.client.messages.create(
-                model=settings.anthropic_model,
-                max_tokens=1024,
+            resp = self._llm.chat_with_tools(
                 system=SYSTEM_PROMPT,
-                tools=TOOLS,
                 messages=messages,
+                tools=TOOLS,
+                max_tokens=1024,
             )
             if resp.stop_reason != "tool_use":
-                result.answer = "".join(
-                    b.text for b in resp.content if b.type == "text"
-                ).strip()
+                result.answer = resp.text
                 return result
 
-            messages.append({"role": "assistant", "content": resp.content})
-            tool_results = []
-            for block in resp.content:
-                if block.type != "tool_use":
-                    continue
+            # Re-build Anthropic-style assistant message for the conversation loop
+            assistant_content: list[dict] = []
+            if resp.text:
+                assistant_content.append({"type": "text", "text": resp.text})
+            for tc in resp.tool_calls:
+                assistant_content.append({
+                    "type": "tool_use",
+                    "id": tc.id,
+                    "name": tc.name,
+                    "input": tc.arguments,
+                })
+            messages.append({"role": "assistant", "content": assistant_content})
+
+            tool_results: list[dict] = []
+            for tc in resp.tool_calls:
                 try:
-                    data = _execute(block.name, block.input or {})
+                    data = _execute(tc.name, tc.arguments)
                     content, is_error = json.dumps(data), False
-                    result.steps.append(f"OK {block.name}({block.input}) -> {data}")
+                    result.steps.append(f"OK {tc.name}({tc.arguments}) -> {data}")
                 except Exception as e:  # noqa: BLE001
                     content, is_error = f"Error: {e}", True
-                    result.steps.append(f"ERROR {block.name}({block.input}) -> {e}")
+                    result.steps.append(f"ERROR {tc.name}({tc.arguments}) -> {e}")
                 tool_results.append({
                     "type": "tool_result",
-                    "tool_use_id": block.id,
+                    "tool_use_id": tc.id,
                     "content": content,
                     "is_error": is_error,
                 })
