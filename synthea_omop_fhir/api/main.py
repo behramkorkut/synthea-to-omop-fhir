@@ -29,7 +29,7 @@ from .dependencies import (
     require_api_key,
     warehouse_guard,
 )
-from .errors import APIError, register as register_errors
+from .errors import register as register_errors
 
 logger = logging.getLogger(__name__)
 

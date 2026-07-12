@@ -5,9 +5,9 @@ from __future__ import annotations
 import logging
 import time
 from collections import deque
-from typing import Annotated, Any
+from typing import Annotated
 
-from fastapi import Depends, Header, Query, Request
+from fastapi import Header, Query, Request
 
 from ..config import settings
 from .errors import RateLimitError, UnauthorizedError, WarehouseNotFoundError

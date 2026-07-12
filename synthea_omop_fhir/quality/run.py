@@ -11,7 +11,6 @@ from __future__ import annotations
 import json
 import sys
 from dataclasses import asdict, dataclass, field
-from datetime import date
 
 import duckdb
 import pandas as pd
@@ -249,7 +248,7 @@ def run() -> QualityReport:
             if df.empty:
                 checks.append(CheckResult(name=f"schema_{table}", table=table, passed=True, details=["empty table"]))
                 continue
-            validated = schema.validate(df, lazy=True)
+            schema.validate(df, lazy=True)
             checks.append(CheckResult(name=f"schema_{table}", table=table, passed=True, n_violations=0))
         except pa.errors.SchemaErrors as exc:
             details = []
