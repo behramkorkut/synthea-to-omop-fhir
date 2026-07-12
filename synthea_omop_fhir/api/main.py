@@ -6,7 +6,8 @@ Features
 - Rate limit: Per-IP sliding window (optional, configured in .env)
 - Pagination: offset + limit on list endpoints
 - Errors    : Structured JSON error responses, never raw tracebacks
-- Logging   : Request timing + structured errors
+- Logging   : Structured JSON or text, with correlation IDs
+- Metrics   : Prometheus exposition on /metrics
 
 Run:  make api   (uvicorn, http://localhost:8000/docs)
 """
@@ -15,12 +16,15 @@ from __future__ import annotations
 
 import logging
 import time
+import uuid
+from contextvars import ContextVar
 from typing import Annotated
 
-from fastapi import Depends, FastAPI, Query, Request
+from fastapi import Depends, FastAPI, Query, Request, Response
 
 from ..cohort import builder
 from ..config import settings
+from ..logging_config import setup_logging
 from ..quality import run as quality_run
 from .dependencies import (
     Pagination,
@@ -30,8 +34,15 @@ from .dependencies import (
     warehouse_guard,
 )
 from .errors import register as register_errors
+from .metrics import ERRORS_TOTAL, REQUEST_COUNT, REQUEST_LATENCY, metrics_endpoint
+
+# Configure logging at import time so uvicorn workers inherit it.
+setup_logging()
 
 logger = logging.getLogger(__name__)
+
+# Per-request correlation ID (propagated through logs).
+_correlation_id: ContextVar[str] = ContextVar("correlation_id", default="")
 
 app = FastAPI(
     title="synthea-to-omop-fhir — Cohort API",
@@ -42,23 +53,67 @@ register_errors(app)
 
 
 # ---------------------------------------------------------------------------
-# Middleware: request logging + timing
+# Middleware: correlation ID + structured request logging + metrics
 # ---------------------------------------------------------------------------
 
 @app.middleware("http")
-async def log_requests(request: Request, call_next):
+async def observability_middleware(request: Request, call_next):
+    cid = request.headers.get("X-Correlation-Id", str(uuid.uuid4()))
+    _correlation_id.set(cid)
+
     start = time.time()
-    response = await call_next(request)
-    elapsed = (time.time() - start) * 1000
+    try:
+        response = await call_next(request)
+    except Exception:
+        # Ensure metrics are recorded even for unhandled exceptions.
+        elapsed = time.time() - start
+        path = request.url.path
+        REQUEST_COUNT.labels(
+            method=request.method, endpoint=path, status="500"
+        ).inc()
+        REQUEST_LATENCY.labels(
+            method=request.method, endpoint=path
+        ).observe(elapsed)
+        raise
+
+    elapsed = time.time() - start
+    path = request.url.path
+    status = str(response.status_code)
+
+    REQUEST_COUNT.labels(
+        method=request.method, endpoint=path, status=status
+    ).inc()
+    REQUEST_LATENCY.labels(
+        method=request.method, endpoint=path
+    ).observe(elapsed)
+
+    extra = {"correlation_id": cid}
     logger.info(
         "%s %s — %s — %.2f ms",
         request.method,
-        request.url.path,
-        response.status_code,
-        elapsed,
+        path,
+        status,
+        elapsed * 1000,
+        extra=extra,
     )
-    response.headers["X-Response-Time-Ms"] = f"{elapsed:.2f}"
+    response.headers["X-Correlation-Id"] = cid
+    response.headers["X-Response-Time-Ms"] = f"{elapsed * 1000:.2f}"
     return response
+
+
+# ---------------------------------------------------------------------------
+# Error metrics hook
+# ---------------------------------------------------------------------------
+
+_original_api_error_handler = app.exception_handlers.get(type(None))  # placeholder
+
+# We attach a small wrapper to count errors by code.
+@app.exception_handler(Exception)
+async def _metrics_exception_handler(request: Request, exc: Exception) -> Response:
+    code = getattr(exc, "code", "internal_error")
+    ERRORS_TOTAL.labels(error_code=code).inc()
+    # Re-raise so the real catchall handler picks it up.
+    raise exc
 
 
 # ---------------------------------------------------------------------------
@@ -67,12 +122,24 @@ async def log_requests(request: Request, call_next):
 
 @app.get("/health", tags=["meta"])
 def health() -> dict:
-    """Liveness probe — returns patient count if warehouse exists."""
+    """Liveness probe — returns patient count if warehouse is responsive."""
     try:
+        start = time.time()
         n = builder.total_patients()
-        return {"status": "ok", "patients": n, "version": "0.2.0"}
+        latency_ms = (time.time() - start) * 1000
+        return {
+            "status": "ok",
+            "patients": n,
+            "db_latency_ms": round(latency_ms, 2),
+            "version": "0.2.0",
+        }
     except Exception:
-        return {"status": "degraded", "patients": None, "version": "0.2.0"}
+        return {
+            "status": "degraded",
+            "patients": None,
+            "db_latency_ms": None,
+            "version": "0.2.0",
+        }
 
 
 @app.get("/ready", tags=["meta"])
@@ -80,6 +147,12 @@ def ready() -> dict:
     """Readiness probe — fails if warehouse is missing."""
     warehouse_guard()
     return {"status": "ready", "warehouse": str(settings.warehouse_db_abs)}
+
+
+@app.get("/metrics", tags=["meta"])
+def metrics() -> Response:
+    """Prometheus metrics exposition."""
+    return metrics_endpoint()
 
 
 # ---------------------------------------------------------------------------

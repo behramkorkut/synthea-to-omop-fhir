@@ -46,6 +46,10 @@ class Settings(BaseSettings):
     openai_model: str = "gpt-4o"
     llm_base_url: str = ""                     # for local / proxy endpoints
 
+    # --- Observability -----------------------------------------------------
+    log_level: str = "INFO"                    # DEBUG | INFO | WARNING | ERROR
+    log_format: str = "text"                   # text | json
+
     @property
     def warehouse_db_abs(self) -> Path:
         return (
