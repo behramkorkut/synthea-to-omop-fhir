@@ -44,24 +44,26 @@ class QualityReport:
 PERSON_SCHEMA = DataFrameSchema(
     {
         "person_id": Column(int, nullable=False, unique=True),
-        "gender_concept_id": Column(int, nullable=False, isin=[8507, 8532, 0]),
+        "gender_concept_id": Column(int, nullable=False, checks=pa.Check.isin([8507, 8532, 0])),
         "year_of_birth": Column(int, nullable=False),
-        "month_of_birth": Column(int, nullable=True, isin=list(range(1, 13))),
-        "day_of_birth": Column(int, nullable=True, isin=list(range(1, 32))),
+        "month_of_birth": Column(int, nullable=True, checks=pa.Check.isin(list(range(1, 13)))),
+        "day_of_birth": Column(int, nullable=True, checks=pa.Check.isin(list(range(1, 32)))),
         "person_source_value": Column(str, nullable=False),
     },
     strict=False,
+    coerce=True,
 )
 
 VISIT_SCHEMA = DataFrameSchema(
     {
         "visit_occurrence_id": Column(int, nullable=False, unique=True),
         "person_id": Column(int, nullable=False),
-        "visit_concept_id": Column(int, nullable=False, isin=[9201, 9202, 9203]),
+        "visit_concept_id": Column(int, nullable=False, checks=pa.Check.isin([9201, 9202, 9203])),
         "visit_start_date": Column(pa.Date, nullable=False),
         "visit_end_date": Column(pa.Date, nullable=True),
     },
     strict=False,
+    coerce=True,
 )
 
 CONDITION_SCHEMA = DataFrameSchema(
@@ -72,6 +74,7 @@ CONDITION_SCHEMA = DataFrameSchema(
         "condition_end_date": Column(pa.Date, nullable=True),
     },
     strict=False,
+    coerce=True,
 )
 
 MEASUREMENT_SCHEMA = DataFrameSchema(
@@ -82,6 +85,7 @@ MEASUREMENT_SCHEMA = DataFrameSchema(
         "value_as_number": Column(float, nullable=True),
     },
     strict=False,
+    coerce=True,
 )
 
 DRUG_SCHEMA = DataFrameSchema(
@@ -92,6 +96,7 @@ DRUG_SCHEMA = DataFrameSchema(
         "drug_exposure_end_date": Column(pa.Date, nullable=True),
     },
     strict=False,
+    coerce=True,
 )
 
 SCHEMAS: dict[str, DataFrameSchema] = {
@@ -109,8 +114,8 @@ SCHEMAS: dict[str, DataFrameSchema] = {
 
 def _check_death_after_birth(con: duckdb.DuckDBPyConnection) -> CheckResult:
     rows = con.execute(
-        "SELECT person_id FROM omop.person p "
-        "JOIN omop.death d USING (person_id) "
+        "SELECT person_id FROM person p "
+        "JOIN death d USING (person_id) "
         "WHERE d.death_date < p.birth_datetime"
     ).fetchall()
     return CheckResult(
@@ -124,7 +129,7 @@ def _check_death_after_birth(con: duckdb.DuckDBPyConnection) -> CheckResult:
 
 def _check_visit_end_after_start(con: duckdb.DuckDBPyConnection) -> CheckResult:
     rows = con.execute(
-        "SELECT visit_occurrence_id FROM omop.visit_occurrence "
+        "SELECT visit_occurrence_id FROM visit_occurrence "
         "WHERE visit_end_date IS NOT NULL AND visit_end_date < visit_start_date"
     ).fetchall()
     return CheckResult(
@@ -138,7 +143,7 @@ def _check_visit_end_after_start(con: duckdb.DuckDBPyConnection) -> CheckResult:
 
 def _check_condition_end_after_start(con: duckdb.DuckDBPyConnection) -> CheckResult:
     rows = con.execute(
-        "SELECT condition_occurrence_id FROM omop.condition_occurrence "
+        "SELECT condition_occurrence_id FROM condition_occurrence "
         "WHERE condition_end_date IS NOT NULL AND condition_end_date < condition_start_date"
     ).fetchall()
     return CheckResult(
@@ -152,7 +157,7 @@ def _check_condition_end_after_start(con: duckdb.DuckDBPyConnection) -> CheckRes
 
 def _check_drug_end_after_start(con: duckdb.DuckDBPyConnection) -> CheckResult:
     rows = con.execute(
-        "SELECT drug_exposure_id FROM omop.drug_exposure "
+        "SELECT drug_exposure_id FROM drug_exposure "
         "WHERE drug_exposure_end_date IS NOT NULL AND drug_exposure_end_date < drug_exposure_start_date"
     ).fetchall()
     return CheckResult(
@@ -167,7 +172,7 @@ def _check_drug_end_after_start(con: duckdb.DuckDBPyConnection) -> CheckResult:
 def _check_measurement_positive_value(con: duckdb.DuckDBPyConnection) -> CheckResult:
     """Some measurements (height, weight) should be positive."""
     rows = con.execute(
-        "SELECT measurement_id FROM omop.measurement "
+        "SELECT measurement_id FROM measurement "
         "WHERE value_as_number IS NOT NULL AND value_as_number <= 0"
     ).fetchall()
     return CheckResult(
@@ -200,7 +205,7 @@ def _check_mapping_coverage(con: duckdb.DuckDBPyConnection) -> CheckResult:
     for table, col in tables:
         try:
             n_total, n_zero = con.execute(
-                f"SELECT count(*), count(*) FILTER (WHERE {col} = 0) FROM omop.{table}"
+                f"SELECT count(*), count(*) FILTER (WHERE {col} = 0) FROM {table}"
             ).fetchone()
             total_rows += n_total
             total_zero += n_zero
@@ -224,7 +229,7 @@ def _check_mapping_coverage(con: duckdb.DuckDBPyConnection) -> CheckResult:
 # ---------------------------------------------------------------------------
 
 def _load_df(con: duckdb.DuckDBPyConnection, table: str) -> pd.DataFrame:
-    return con.execute(f"SELECT * FROM omop.{table}").fetchdf()
+    return con.execute(f"SELECT * FROM {table}").fetchdf()
 
 
 def run() -> QualityReport:
@@ -247,7 +252,10 @@ def run() -> QualityReport:
             validated = schema.validate(df, lazy=True)
             checks.append(CheckResult(name=f"schema_{table}", table=table, passed=True, n_violations=0))
         except pa.errors.SchemaErrors as exc:
-            details = [f"{err['column']}: {err['check']} — {err['failure_cases']}" for err in exc.schema_errors[:5]]
+            details = []
+            for err in exc.schema_errors[:5]:
+                msg = getattr(err, "error", str(err))
+                details.append(msg)
             checks.append(CheckResult(
                 name=f"schema_{table}", table=table, passed=False,
                 n_violations=len(exc.schema_errors), details=details,
