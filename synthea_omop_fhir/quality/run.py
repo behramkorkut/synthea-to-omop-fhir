@@ -12,12 +12,14 @@ import json
 import sys
 from dataclasses import asdict, dataclass, field
 
-import duckdb
+from typing import Any
+
 import pandas as pd
 import pandera as pa
 from pandera import Column, DataFrameSchema
 
 from ..config import settings
+from ..db import get_connection
 
 
 @dataclass
@@ -111,7 +113,7 @@ SCHEMAS: dict[str, DataFrameSchema] = {
 # Custom coherence checks (beyond Pandera schemas)
 # ---------------------------------------------------------------------------
 
-def _check_death_after_birth(con: duckdb.DuckDBPyConnection) -> CheckResult:
+def _check_death_after_birth(con: Any) -> CheckResult:
     rows = con.execute(
         "SELECT person_id FROM person p "
         "JOIN death d USING (person_id) "
@@ -126,7 +128,7 @@ def _check_death_after_birth(con: duckdb.DuckDBPyConnection) -> CheckResult:
     )
 
 
-def _check_visit_end_after_start(con: duckdb.DuckDBPyConnection) -> CheckResult:
+def _check_visit_end_after_start(con: Any) -> CheckResult:
     rows = con.execute(
         "SELECT visit_occurrence_id FROM visit_occurrence "
         "WHERE visit_end_date IS NOT NULL AND visit_end_date < visit_start_date"
@@ -140,7 +142,7 @@ def _check_visit_end_after_start(con: duckdb.DuckDBPyConnection) -> CheckResult:
     )
 
 
-def _check_condition_end_after_start(con: duckdb.DuckDBPyConnection) -> CheckResult:
+def _check_condition_end_after_start(con: Any) -> CheckResult:
     rows = con.execute(
         "SELECT condition_occurrence_id FROM condition_occurrence "
         "WHERE condition_end_date IS NOT NULL AND condition_end_date < condition_start_date"
@@ -154,7 +156,7 @@ def _check_condition_end_after_start(con: duckdb.DuckDBPyConnection) -> CheckRes
     )
 
 
-def _check_drug_end_after_start(con: duckdb.DuckDBPyConnection) -> CheckResult:
+def _check_drug_end_after_start(con: Any) -> CheckResult:
     rows = con.execute(
         "SELECT drug_exposure_id FROM drug_exposure "
         "WHERE drug_exposure_end_date IS NOT NULL AND drug_exposure_end_date < drug_exposure_start_date"
@@ -168,7 +170,7 @@ def _check_drug_end_after_start(con: duckdb.DuckDBPyConnection) -> CheckResult:
     )
 
 
-def _check_measurement_positive_value(con: duckdb.DuckDBPyConnection) -> CheckResult:
+def _check_measurement_positive_value(con: Any) -> CheckResult:
     """Some measurements (height, weight) should be positive."""
     rows = con.execute(
         "SELECT measurement_id FROM measurement "
@@ -187,7 +189,7 @@ def _check_measurement_positive_value(con: duckdb.DuckDBPyConnection) -> CheckRe
 # Mapping coverage check (concept_id = 0)
 # ---------------------------------------------------------------------------
 
-def _check_mapping_coverage(con: duckdb.DuckDBPyConnection) -> CheckResult:
+def _check_mapping_coverage(con: Any) -> CheckResult:
     """Report % of records with unmapped concept_id (= 0)."""
     tables = [
         ("person", "gender_concept_id"),
@@ -210,7 +212,7 @@ def _check_mapping_coverage(con: duckdb.DuckDBPyConnection) -> CheckResult:
             total_zero += n_zero
             pct = (n_zero / n_total * 100) if n_total else 0
             details.append(f"{table}.{col}: {n_zero}/{n_total} unmapped ({pct:.1f}%)")
-        except duckdb.CatalogException:
+        except Exception:
             details.append(f"{table}.{col}: table or column not found — skipped")
     overall_pct = (total_zero / total_rows * 100) if total_rows else 0
     # We consider it a warning, not a hard failure (mapping is external).
@@ -227,7 +229,7 @@ def _check_mapping_coverage(con: duckdb.DuckDBPyConnection) -> CheckResult:
 # Main runner
 # ---------------------------------------------------------------------------
 
-def _load_df(con: duckdb.DuckDBPyConnection, table: str) -> pd.DataFrame:
+def _load_df(con, table: str) -> pd.DataFrame:
     return con.execute(f"SELECT * FROM {table}").fetchdf()
 
 
@@ -236,8 +238,8 @@ def run() -> QualityReport:
     if not db_path.exists():
         raise FileNotFoundError(f"OMOP warehouse not found at {db_path}. Run `make omop` first.")
 
-    con = duckdb.connect(str(db_path))
-    con.execute("USE omop.omop")
+    con = get_connection()
+    con.set_schema("omop")
 
     checks: list[CheckResult] = []
 

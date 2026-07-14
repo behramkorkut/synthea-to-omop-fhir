@@ -50,6 +50,10 @@ class Settings(BaseSettings):
     log_level: str = "INFO"                    # DEBUG | INFO | WARNING | ERROR
     log_format: str = "text"                   # text | json
 
+    # --- Database engine ---------------------------------------------------
+    db_engine: str = "duckdb"                  # duckdb | postgres
+    postgres_dsn: str = ""                   # postgresql://user:pass@host:5432/db
+
     @property
     def warehouse_db_abs(self) -> Path:
         return (

@@ -9,9 +9,8 @@ Run:  uv run python -m synthea_omop_fhir.load_bronze
 
 from __future__ import annotations
 
-import duckdb
-
 from .config import settings
+from .db import get_connection
 
 # The Synthea tables we ingest (all of them, so nothing is lost for later use).
 SYNTHEA_TABLES = [
@@ -23,6 +22,12 @@ SYNTHEA_TABLES = [
 
 
 def main() -> None:
+    if settings.db_engine != "duckdb":
+        raise RuntimeError(
+            f"load_bronze only supports DuckDB (got db_engine={settings.db_engine}). "
+            f"For PostgreSQL, load bronze CSVs via COPY or an ETL tool."
+        )
+
     csv_dir = settings.synthea_dir / "csv"
     if not csv_dir.exists():
         raise FileNotFoundError(
@@ -32,7 +37,7 @@ def main() -> None:
 
     db_path = settings.warehouse_db_abs
     db_path.parent.mkdir(parents=True, exist_ok=True)
-    con = duckdb.connect(str(db_path))
+    con = get_connection()
     con.execute("DROP SCHEMA IF EXISTS bronze CASCADE;")
     con.execute("CREATE SCHEMA bronze;")
 

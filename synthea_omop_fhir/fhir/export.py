@@ -14,8 +14,6 @@ import json
 import sys
 import uuid
 
-import duckdb
-
 # FHIR R4B (the version deployed in most EHRs / HAPI FHIR), not the library's R5 default.
 from fhir.resources.R4B.condition import Condition
 from fhir.resources.R4B.encounter import Encounter
@@ -23,6 +21,7 @@ from fhir.resources.R4B.observation import Observation
 from fhir.resources.R4B.patient import Patient
 
 from ..config import settings
+from ..db import get_connection
 
 DEFAULT_N_PATIENTS = 25
 MAX_OBSERVATIONS = 500  # keep the demo bundle small
@@ -43,8 +42,7 @@ def _validated(model_cls, payload: dict) -> dict:
     return json.loads(model_cls(**payload).model_dump_json(exclude_none=True))
 
 
-def build_bundle(con: duckdb.DuckDBPyConnection, n_patients: int) -> dict:
-    con.execute("USE omop.omop")
+def build_bundle(con, n_patients: int) -> dict:
     entries: list[dict] = []
 
     def add(resource: dict, resource_type: str) -> str:
@@ -125,7 +123,8 @@ def build_bundle(con: duckdb.DuckDBPyConnection, n_patients: int) -> dict:
 
 def main() -> None:
     n = int(sys.argv[1]) if len(sys.argv) > 1 else DEFAULT_N_PATIENTS
-    con = duckdb.connect(str(settings.warehouse_db_abs))
+    con = get_connection()
+    con.set_schema("omop")
     bundle = build_bundle(con, n)
     con.close()
 

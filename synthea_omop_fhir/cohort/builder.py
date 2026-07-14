@@ -8,18 +8,16 @@ injection surface.
 
 from __future__ import annotations
 
-import duckdb
-
-from ..config import settings
+from ..db import get_connection
 
 # Distinct code -> description lookups (Synthea Bronze holds the human labels).
 _COND_LABELS = "(SELECT DISTINCT code, description FROM omop.bronze.conditions)"
 _OBS_LABELS = "(SELECT DISTINCT code, description FROM omop.bronze.observations)"
 
 
-def _con() -> duckdb.DuckDBPyConnection:
-    con = duckdb.connect(str(settings.warehouse_db_abs), read_only=True)
-    con.execute("USE omop.omop")
+def _con():
+    con = get_connection()
+    con.set_schema("omop")
     return con
 
 
