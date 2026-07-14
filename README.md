@@ -1,8 +1,9 @@
 # synthea-to-omop-fhir
 
 > A **governed, sovereign health-data pipeline**: synthetic patients → **OMOP CDM**
-> (research) → **FHIR** (interoperability), with data-quality checks and a
-> **governed clinical AI agent**. Zero real data, zero RGPD.
+> (research) → **FHIR** (interoperability), with production-grade data-quality checks,
+> a **robust FastAPI**, and a **governed clinical AI agent** (LLM-agnostic).
+> Zero real data, zero RGPD.
 
 ![CI](https://img.shields.io/badge/CI-GitHub_Actions-2088FF?logo=githubactions&logoColor=white)
 ![tests](https://img.shields.io/badge/tests-11_passing_+_41_dbt-brightgreen?logo=pytest&logoColor=white)
@@ -15,7 +16,8 @@
 Portfolio project demonstrating **health-data engineering** on the two standards
 that matter in a French *Entrepôt de Données de Santé* (EDS): **OMOP CDM** (OHDSI,
 reproducible research) and **FHIR** (HL7, interoperability) — built on **Synthea**
-synthetic patients, with the software rigor (tests, CI, containers) and the
+synthetic patients, with the software rigor (tests, CI, containers, 61% coverage),
+**observability** (Prometheus metrics, structured JSON logs, correlation IDs), and the
 **governance/sovereignty** awareness (RGPD, HDS, SecNumCloud) health teams require.
 
 ## Architecture
@@ -25,10 +27,10 @@ flowchart LR
     SYN["Synthea<br/>(synthetic patients)"] --> BRONZE[("Bronze<br/>DuckDB")]
     BRONZE --> STG["dbt staging"]
     STG --> OMOP[("OMOP CDM<br/>person · visit · condition ·<br/>drug · measurement · observation")]
-    OMOP --> DQ["data quality<br/>(dbt tests · mapping coverage)"]
+    OMOP --> DQ["data quality<br/>(dbt tests · Pandera DQD · mapping coverage)"]
     OMOP --> COHORT["governed cohort ops<br/>(read-only, no free SQL)"]
     OMOP --> FHIREXP["FHIR R4B export"] --> HAPI["HAPI FHIR<br/>/fhir REST"]
-    COHORT --> AGENT["governed clinical agent<br/>(Claude tool-use)"]
+    COHORT --> AGENT["governed clinical agent<br/>(LLM-agnostic: Claude / OpenAI)"]
     COHORT --> API["FastAPI + Streamlit"]
 
     subgraph SOV["sovereign deploy (OVH / SecNumCloud-ready)"]
@@ -45,6 +47,31 @@ Full rationale in [`docs/architecture.md`](docs/architecture.md).
 - **FHIR** (HL7, R4B): REST resources (`Patient`, `Encounter`, `Condition`,
   `Observation`…) → the interoperability lingua franca.
 - **Synthea**: open-source synthetic patient generator → realistic but fake data.
+
+## Production-ready upgrades (8 steps)
+
+The project was hardened through an incremental production-readiness plan:
+
+1. **SQL injection fix** — `fhir/export.py` moved from Python string interpolation to
+   DuckDB prepared statements (`UNNEST(?)`) for patient-id cohorts.
+2. **Data-quality module** (`quality/`) — Pandera DQD-like checks: schema validation,
+   temporal coherence (death after birth, end after start), and OMOP mapping-coverage
+   metrics. Run with `uv run python -m synthea_omop_fhir.quality.run`.
+3. **Robust API** — FastAPI with API-key auth, global error handlers, pagination,
+   rate-limiting, correlation-ID middleware, and OpenAPI `/docs`.
+4. **LLM-agnostic agent** — `agent/llm.py` abstracts Anthropic and OpenAI behind a
+   common `LLMClient` interface; switch provider via `LLM_PROVIDER` env var.
+5. **Observability** — structured JSON logging, Prometheus metrics (`/metrics`),
+   health (`/health`) and readiness (`/ready`) probes with DB latency.
+6. **Demo / prod configuration** — `db.py` factory supports DuckDB (local) and
+   PostgreSQL (production) via `DB_PROVIDER` env var; `.env.example` documents all
+   settings.
+7. **Sovereign infrastructure** — Terraform for OVH Cloud (instance, network, managed
+   PostgreSQL) + `docker-compose.prod.yml` for the full stack (API + DB + HAPI + nginx).
+8. **Test coverage** — 61% pytest coverage with unit tests for `api/`, `db.py`,
+   `fhir/export.py`, `quality/`, `agent/llm.py`, and error handlers.
+
+See `audit_projet/progress.txt` for the full audit trail.
 
 ## Governed clinical AI
 
@@ -69,11 +96,12 @@ Requires [uv](https://docs.astral.sh/uv/). Synthea needs Java — or generate it
 make setup                       # uv sync
 # generate patients: locally (make synthea, needs Java) or on Colab -> data/synthea/csv/
 make bronze && make omop         # Synthea -> DuckDB -> OMOP CDM (+ 41 dbt tests)
-make test                        # 11 pytest tests
+make test                        # pytest suite (includes coverage)
+make quality                     # Pandera DQD-like data-quality report
 
 make api                         # cohort API      -> http://localhost:8000/docs
 make dashboard                   # cohort explorer -> http://localhost:8501
-make ask Q="Top 10 conditions?"  # governed clinical agent (needs ANTHROPIC_API_KEY)
+make ask Q="Top 10 conditions?"  # governed clinical agent (needs ANTHROPIC_API_KEY or OPENAI_API_KEY)
 
 make fhir-export && make fhir-server && make fhir-push   # OMOP -> FHIR -> HAPI
 ```
@@ -82,6 +110,12 @@ One command for the whole stack (API + dashboard + HAPI FHIR):
 
 ```bash
 docker compose up --build        # or: make docker-up
+```
+
+Production stack (OVH / any Docker host):
+
+```bash
+docker compose -f docker-compose.prod.yml up --build
 ```
 
 Run `make help` to see every target.
@@ -100,10 +134,14 @@ while showcasing governed RAG on a real domain problem.
 
 ## Testing & quality
 
-- **11 pytest** tests: agent allow-list, tool rejection, FHIR R4B validation, and
-  cohort/agent integration (they *skip* cleanly if the warehouse isn't built).
+- **pytest** (61% coverage): agent allow-list, tool rejection, FHIR R4B validation,
+  cohort/agent integration, API auth & rate-limiting, DB factory, error handlers,
+  Pandera schema validation, and LLM factory (they *skip* cleanly if the warehouse
+  isn't built).
 - **41 dbt tests**: primary keys, referential integrity to `person`, accepted
-  concept values. CI runs lint + tests on every push.
+  concept values.
+- **Pandera DQD-like checks**: schema, temporal coherence, mapping coverage.
+- CI runs `ruff check .` + `pytest` on every push.
 
 ## Governance & sovereignty
 
@@ -122,14 +160,18 @@ aligned with the French HDS → sovereign-cloud shift. See
 - [x] OMOP → FHIR R4B export + HAPI FHIR server
 - [x] Governed cohort ops + clinical AI agent + API/dashboard
 - [x] Docker + CI + governance & sovereign-deployment docs
+- [x] Production-ready hardening (8-step upgrade: SQL injection fix, DQD module,
+  robust API, LLM-agnostic agent, observability, demo/prod config, Terraform infra,
+  61% test coverage)
 - [ ] LLM/RAG concept-mapping assistant (Usagi/Llettuce-style)
 
 ## What this demonstrates
 
 Health-data engineering (Synthea → **OMOP CDM** → **FHIR**), data quality (dbt +
-mapping coverage), **safe agentic AI on patient data** (governed cohort ops, no
-SQL), plus solid practices: uv, Docker/Colima, self-documenting Makefile, CI, a
-tested codebase, and a **sovereign** deployment path.
+Pandera DQD + mapping coverage), **safe agentic AI on patient data** (governed
+cohort ops, no SQL), plus solid practices: uv, Docker/Colima, self-documenting
+Makefile, CI, a tested codebase (61% coverage), structured observability, and a
+**sovereign** deployment path.
 
 ## License
 
