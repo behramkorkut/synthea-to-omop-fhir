@@ -172,6 +172,29 @@ Le projet a été durci via un plan incrémental documenté dans
 
 ---
 
+## Boucle RAG — combler les `concept_id = 0`
+
+Le maillon manquant du pipeline est le **mapping des codes source vers les
+concepts standard OHDSI**. [`governed-omop-rag`](https://github.com/behramkorkut/governed-omop-rag)
+produit un `source_to_concept_map` validé par un steward humain ; ce repo le
+réinjecte via `scripts/apply_stcm.py` pour remplacer les `concept_id = 0`.
+
+```mermaid
+flowchart LR
+    A["synthea-to-omop-fhir<br/>génère l'entrepôt OMOP"] --> B{"concept_id = 0 ?"}
+    B -->|"résidu"| C["export codes source"]
+    C --> D["governed-omop-rag<br/>router + RAG + steward"]
+    D --> E["source_to_concept_map<br/>(validé humain)"]
+    E --> F["scripts/apply_stcm.py<br/>UPDATE idempotent"]
+    F --> A
+    B -->|"déjà mappé"| G["entrepôt exploitable"]
+    F --> G
+```
+
+Détail complet : [`docs/rag_integration.md`](docs/rag_integration.md).
+
+---
+
 ## Gouvernance (fil rouge)
 
 RGPD / HDS / secret médical pris en compte *by design* : données 100 % synthétiques,

@@ -163,7 +163,10 @@ aligned with the French HDS → sovereign-cloud shift. See
 - [x] Production-ready hardening (8-step upgrade: SQL injection fix, DQD module,
   robust API, LLM-agnostic agent, observability, demo/prod config, Terraform infra,
   61% test coverage)
-- [ ] LLM/RAG concept-mapping assistant (Usagi/Llettuce-style)
+- [x] LLM/RAG concept-mapping assistant — **réalisé par le projet frère**
+  [`governed-omop-rag`](https://github.com/behramkorkut/governed-omop-rag)
+  (RAG agentique gouverné, human-in-the-loop, 92 % coverage). Boucle de
+  réinjection documentée dans [`docs/rag_integration.md`](docs/rag_integration.md).
 
 ## What this demonstrates
 
