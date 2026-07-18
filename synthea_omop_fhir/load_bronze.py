@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from .config import settings
 from .db import get_connection
+from .sql import quote_ident
 
 # The Synthea tables we ingest (all of them, so nothing is lost for later use).
 SYNTHEA_TABLES = [
@@ -49,12 +50,13 @@ def main() -> None:
             print(f"  - {name:<20} (skipped: file absent)")
             continue
         # all_varchar=true => keep raw text; Silver will cast/clean.
+        # `name` = identifiant (quoté) ; le chemin CSV est passé en PARAMÈTRE lié.
         con.execute(
-            f"CREATE TABLE bronze.{name} AS "
-            f"SELECT * FROM read_csv_auto('{path.as_posix()}', "
-            f"header = true, all_varchar = true);"
+            f"CREATE TABLE bronze.{quote_ident(name)} AS "
+            "SELECT * FROM read_csv_auto(?, header = true, all_varchar = true);",
+            [path.as_posix()],
         )
-        n = con.execute(f"SELECT count(*) FROM bronze.{name};").fetchone()[0]
+        n = con.execute(f"SELECT count(*) FROM bronze.{quote_ident(name)};").fetchone()[0]
         total += n
         print(f"  - bronze.{name:<20} {n:>8} rows")
 

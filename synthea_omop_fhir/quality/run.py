@@ -20,6 +20,7 @@ from pandera import Column, DataFrameSchema
 
 from ..config import settings
 from ..db import get_connection
+from ..sql import quote_ident
 
 
 @dataclass
@@ -243,7 +244,8 @@ def _check_mapping_coverage(con: Any) -> CheckResult:
     for table, col in tables:
         try:
             n_total, n_zero = con.execute(
-                f"SELECT count(*), count(*) FILTER (WHERE {col} = 0) FROM {table}"
+                f"SELECT count(*), count(*) FILTER (WHERE {quote_ident(col)} = 0) "
+                f"FROM {quote_ident(table)}"
             ).fetchone()
             total_rows += n_total
             total_zero += n_zero
@@ -314,11 +316,16 @@ def run() -> QualityReport:
     con.close()
 
     passed = all(c.passed for c in checks)
+    # On sépare les VRAIES violations (checks en échec) des constats
+    # INFORMATIONNELS (checks verts qui comptent tout de même des cas : couverture
+    # de mapping, incohérences héritées de la source). Auparavant `total_violations`
+    # mélangeait les deux, affichant ~1 M sur un rapport 100 % vert (trompeur).
     summary = {
         "total_checks": len(checks),
         "passed": sum(1 for c in checks if c.passed),
         "failed": sum(1 for c in checks if not c.passed),
-        "total_violations": sum(c.n_violations for c in checks),
+        "violations": sum(c.n_violations for c in checks if not c.passed),
+        "informational_findings": sum(c.n_violations for c in checks if c.passed),
     }
     return QualityReport(passed=passed, checks=checks, summary=summary)
 

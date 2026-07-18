@@ -21,6 +21,31 @@ from synthea_omop_fhir.config import settings
 client = TestClient(app)
 
 
+# --- S2 regression guard: structured JSON on any unhandled exception ---
+
+def test_unhandled_exception_returns_structured_json_500():
+    """P1-B/S2: a generic exception must yield a STRUCTURED JSON 500 through the
+    REAL app stack. This is the only test that would catch a regression where a
+    second `Exception` handler overrides the catchall (the bug fixed in S2).
+    """
+    async def _boom() -> dict:
+        raise RuntimeError("kaboom")
+
+    app.add_api_route("/__boom_test__", _boom, methods=["GET"])
+    try:
+        # raise_server_exceptions=False -> let the app's handlers produce the response.
+        local = TestClient(app, raise_server_exceptions=False)
+        resp = local.get("/__boom_test__")
+        assert resp.status_code == 500
+        body = resp.json()
+        assert body["error"]["code"] == "internal_error"
+        assert "message" in body["error"]
+    finally:
+        app.router.routes[:] = [
+            r for r in app.router.routes if getattr(r, "path", None) != "/__boom_test__"
+        ]
+
+
 # --- Meta endpoints (no warehouse) ---
 
 def test_health_returns_degraded_when_no_warehouse():

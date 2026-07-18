@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
 from ..config import settings
 
@@ -64,12 +64,14 @@ class AnthropicClient(LLMClient):
         tools: list[dict],
         max_tokens: int,
     ) -> LLMResponse:
+        # tools/messages sont des dicts internes, volontairement agnostiques du
+        # SDK : on caste au niveau de l'appel (le SDK valide au runtime).
         resp = self._client.messages.create(
             model=self.model,
             max_tokens=max_tokens,
             system=system,
-            tools=tools,
-            messages=messages,
+            tools=cast(Any, tools),
+            messages=cast(Any, messages),
         )
         text = "".join(b.text for b in resp.content if b.type == "text").strip()
         tool_calls = [
@@ -211,21 +213,22 @@ class OpenAIClient(LLMClient):
         oai_msgs = self._convert_messages(system, messages)
         resp = self._client.chat.completions.create(
             model=self.model,
-            messages=oai_msgs,
-            tools=oai_tools,
+            messages=cast(Any, oai_msgs),
+            tools=cast(Any, oai_tools),
             tool_choice="auto",
             max_tokens=max_tokens,
         )
         choice = resp.choices[0]
         msg = choice.message
         text = msg.content or ""
+        # Nos outils sont tous de type "function" ; on caste l'union du SDK.
         tool_calls = [
             ToolCall(
                 id=tc.id,
                 name=tc.function.name,
                 arguments=json.loads(tc.function.arguments),
             )
-            for tc in (msg.tool_calls or [])
+            for tc in cast(Any, msg.tool_calls or [])
         ]
         stop = "tool_use" if choice.finish_reason == "tool_calls" else "stop"
         return LLMResponse(stop_reason=stop, text=text, tool_calls=tool_calls)

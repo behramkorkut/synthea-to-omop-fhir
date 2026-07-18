@@ -156,7 +156,7 @@ def prevalence(
     _rl: Annotated[None, Depends(rate_limit)],
     _wh: Annotated[None, Depends(warehouse_guard)],
     top_n: int = Query(10, ge=1, le=100),
-    page: Annotated[Pagination, Depends(paginator)] = None,
+    page: Annotated[Pagination | None, Depends(paginator)] = None,
 ) -> dict:
     """Most frequent conditions by distinct patient count (paginated)."""
     rows = builder.condition_prevalence(top_n)

@@ -94,3 +94,37 @@ def test_drug_end_check_ignores_source_inherited_incoherence():
     con.close()
     assert result.n_violations == 1        # still counted and reported
     assert result.passed                    # but green: the quirk is source-inherited
+
+
+def test_drug_end_check_fails_on_pipeline_introduced_incoherence():
+    """P1-B: if the source is CLEAN but drug_exposure is incoherent, the check
+    must FAIL — the incoherence was introduced by the pipeline, not inherited."""
+    con = duckdb.connect(":memory:")
+    con.execute("CREATE SCHEMA bronze")
+    con.execute("CREATE TABLE bronze.medications (start VARCHAR, stop VARCHAR)")
+    # Source propre : stop >= start.
+    con.execute("INSERT INTO bronze.medications VALUES ('2020-01-01', '2020-01-10')")
+    con.execute(
+        "CREATE TABLE drug_exposure (drug_exposure_id INT, "
+        "drug_exposure_start_date DATE, drug_exposure_end_date DATE)"
+    )
+    # Sortie incohérente alors que la source ne l'était pas.
+    con.execute("INSERT INTO drug_exposure VALUES (1, DATE '2020-01-10', DATE '2020-01-05')")
+    result = _check_drug_end_after_start(con)
+    con.close()
+    assert result.n_violations == 1
+    assert not result.passed  # introduite par le pipeline -> FAIL
+
+
+def test_drug_end_check_fails_when_bronze_missing():
+    """Fail-safe : sans schéma bronze, on ne peut pas attribuer -> FAIL prudent."""
+    con = duckdb.connect(":memory:")
+    con.execute(
+        "CREATE TABLE drug_exposure (drug_exposure_id INT, "
+        "drug_exposure_start_date DATE, drug_exposure_end_date DATE)"
+    )
+    con.execute("INSERT INTO drug_exposure VALUES (1, DATE '2020-01-10', DATE '2020-01-05')")
+    result = _check_drug_end_after_start(con)
+    con.close()
+    assert result.n_violations == 1
+    assert not result.passed

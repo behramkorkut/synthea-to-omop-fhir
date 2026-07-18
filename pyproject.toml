@@ -23,6 +23,7 @@ dependencies = [
 [dependency-groups]
 dev = [
     "mypy>=1.19.1",
+    "pandas-stubs>=2.2",
     "pytest>=9.1.1",
     "pytest-cov>=6.1.1",
     "ruff>=0.15.20",
@@ -32,3 +33,15 @@ dev = [
 testpaths = ["tests"]
 pythonpath = ["."]
 addopts = "-q"
+
+[tool.mypy]
+python_version = "3.11"
+
+# Dépendances tierces sans stubs de type (C-extensions) ou optionnelles : on ne
+# type-checke pas leurs internals, seulement notre usage. `psycopg` est en plus
+# une dépendance optionnelle (chemin PostgreSQL), non installée par défaut.
+# NB : on liste le module RACINE ET `*` — le glob `foo.*` seul ne couvre PAS
+# l'import top-level `import foo` (pandas est typé via pandas-stubs, dev-dep).
+[[tool.mypy.overrides]]
+module = ["duckdb", "duckdb.*", "psycopg", "psycopg.*", "fhir", "fhir.*"]
+ignore_missing_imports = true
