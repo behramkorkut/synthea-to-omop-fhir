@@ -27,6 +27,9 @@ class FakeRaw:
         return self._rows
 
     def fetchone(self):
+        # DuckDB set_schema resolves the catalog via SELECT current_database().
+        if self.calls and "current_database" in str(self.calls[-1]):
+            return ("omop",)
         return self._rows[0] if self._rows else None
 
     def fetchdf(self):
@@ -41,14 +44,23 @@ def test_duckdb_set_schema():
     raw = FakeRaw()
     con = Connection(raw, "duckdb")
     con.set_schema("omop")
-    assert any("USE omop.omop" in str(c) for c in raw.calls)
+    # Catalog resolved at runtime (filename-independent), schema quoted.
+    assert any("current_database" in str(c) for c in raw.calls)
+    assert any('"omop"."omop"' in str(c) for c in raw.calls)
 
 
 def test_postgres_set_schema():
     raw = FakeRaw()
     con = Connection(raw, "postgres")
     con.set_schema("omop")
-    assert any("SET search_path" in str(c) for c in raw.calls)
+    assert any('SET search_path TO "omop"' in str(c) for c in raw.calls)
+
+
+def test_set_schema_rejects_non_identifier():
+    raw = FakeRaw()
+    con = Connection(raw, "duckdb")
+    with pytest.raises(ValueError, match="Invalid schema name"):
+        con.set_schema("omop; DROP TABLE person")
 
 
 def test_connection_set_schema_unknown_engine():

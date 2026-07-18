@@ -157,24 +157,61 @@ def _check_condition_end_after_start(con: Any) -> CheckResult:
 
 
 def _check_drug_end_after_start(con: Any) -> CheckResult:
-    rows = con.execute(
-        "SELECT drug_exposure_id FROM drug_exposure "
-        "WHERE drug_exposure_end_date IS NOT NULL AND drug_exposure_end_date < drug_exposure_start_date"
-    ).fetchall()
+    """End ≥ start on drug exposures.
+
+    Distinguishes incoherences **introduced by the pipeline** (a real defect →
+    FAIL) from those **inherited from the Synthea source** (`bronze.medications`
+    already has stop < start), which the pipeline preserves faithfully by design.
+    Source-inherited quirks are reported (counted + listed) but not treated as a
+    pipeline failure — the same informational stance as `mapping_coverage`.
+    """
+    n_out = con.execute(
+        "SELECT count(*) FROM drug_exposure "
+        "WHERE drug_exposure_end_date IS NOT NULL "
+        "AND drug_exposure_end_date < drug_exposure_start_date"
+    ).fetchone()[0]
+    try:
+        n_source = con.execute(
+            "SELECT count(*) FROM bronze.medications "
+            "WHERE stop IS NOT NULL AND stop <> '' AND stop < start"
+        ).fetchone()[0]
+    except Exception:
+        n_source = 0
+    pipeline_introduced = max(0, n_out - n_source)
     return CheckResult(
         name="drug_end_after_start",
         table="drug_exposure",
-        passed=len(rows) == 0,
-        n_violations=len(rows),
-        details=[f"drug_exposure_id={r[0]}" for r in rows[:5]],
+        passed=pipeline_introduced == 0,  # green if all quirks come from source
+        n_violations=n_out,
+        details=[
+            f"{n_out} end<start total; {n_source} inherited from Synthea source "
+            f"(bronze.medications), {pipeline_introduced} introduced by the pipeline.",
+        ],
     )
 
 
+# LOINC codes where a value ≤ 0 is physiologically impossible. Scoped on purpose:
+# many valid measurements are legitimately 0 or negative (questionnaire/severity
+# scores, DALY/QALY, urine dipstick "presence" flags…), so a blanket
+# "value ≤ 0 is a violation" rule produces thousands of false positives.
+_POSITIVE_MEASUREMENT_CODES = (
+    "8302-2",   # Body height
+    "29463-7",  # Body weight
+    "39156-5",  # Body mass index (BMI)
+    "8310-5",   # Body temperature
+    "8867-4",   # Heart rate
+)
+
+
 def _check_measurement_positive_value(con: Any) -> CheckResult:
-    """Some measurements (height, weight) should be positive."""
+    """Physical measurements (height, weight, BMI, temperature, heart rate) must
+    be strictly positive. Scoped to those LOINC codes — see note above."""
+    placeholders = ", ".join("?" for _ in _POSITIVE_MEASUREMENT_CODES)
     rows = con.execute(
         "SELECT measurement_id FROM measurement "
-        "WHERE value_as_number IS NOT NULL AND value_as_number <= 0"
+        f"WHERE measurement_source_value IN ({placeholders}) "
+        "AND value_as_number IS NOT NULL AND value_as_number <= 0",
+        list(_POSITIVE_MEASUREMENT_CODES),
     ).fetchall()
     return CheckResult(
         name="measurement_positive_value",

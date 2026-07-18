@@ -6,7 +6,7 @@
 > Zero real data, zero RGPD.
 
 ![CI](https://img.shields.io/badge/CI-GitHub_Actions-2088FF?logo=githubactions&logoColor=white)
-![tests](https://img.shields.io/badge/tests-11_passing_+_41_dbt-brightgreen?logo=pytest&logoColor=white)
+![tests](https://img.shields.io/badge/tests-64_pytest_+_41_dbt-brightgreen?logo=pytest&logoColor=white)
 ![Python](https://img.shields.io/badge/Python-3.11-3776AB?logo=python&logoColor=white)
 ![OMOP](https://img.shields.io/badge/OMOP_CDM-OHDSI-005A9C)
 ![FHIR](https://img.shields.io/badge/FHIR-HL7_R4B-E4002B)

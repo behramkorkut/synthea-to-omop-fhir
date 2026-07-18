@@ -1,5 +1,6 @@
 """Quality module tests (unit, no warehouse)."""
 
+import duckdb
 import pytest
 import pandera as pa
 
@@ -7,6 +8,8 @@ from synthea_omop_fhir.quality.run import (
     PERSON_SCHEMA,
     CheckResult,
     QualityReport,
+    _check_drug_end_after_start,
+    _check_measurement_positive_value,
 )
 
 
@@ -53,3 +56,41 @@ def test_person_schema_rejects_invalid_gender():
     })
     with pytest.raises(pa.errors.SchemaErrors):
         PERSON_SCHEMA.validate(df, lazy=True)
+
+
+def test_measurement_positive_check_is_scoped_to_physical_codes():
+    """S3: a score legitimately at 0 is NOT a violation; only physical codes are."""
+    con = duckdb.connect(":memory:")
+    con.execute(
+        "CREATE TABLE measurement (measurement_id INT, measurement_source_value VARCHAR, "
+        "value_as_number DOUBLE)"
+    )
+    con.execute(
+        "INSERT INTO measurement VALUES "
+        "(1, '72514-3', 0),   -- pain score 0/10: valid, must NOT be flagged\n"
+        "(2, '8302-2', 0),    -- body height 0: impossible, MUST be flagged\n"
+        "(3, '29463-7', 70)   -- body weight 70: valid"
+    )
+    result = _check_measurement_positive_value(con)
+    con.close()
+    assert result.n_violations == 1  # only the height=0, not the pain score
+    assert not result.passed
+
+
+def test_drug_end_check_ignores_source_inherited_incoherence():
+    """S4: an end<start inherited from bronze source is reported but not a FAIL."""
+    con = duckdb.connect(":memory:")
+    con.execute("CREATE SCHEMA bronze")
+    con.execute(
+        "CREATE TABLE bronze.medications (start VARCHAR, stop VARCHAR)"
+    )
+    con.execute("INSERT INTO bronze.medications VALUES ('2020-01-10', '2020-01-05')")
+    con.execute(
+        "CREATE TABLE drug_exposure (drug_exposure_id INT, "
+        "drug_exposure_start_date DATE, drug_exposure_end_date DATE)"
+    )
+    con.execute("INSERT INTO drug_exposure VALUES (1, DATE '2020-01-10', DATE '2020-01-05')")
+    result = _check_drug_end_after_start(con)
+    con.close()
+    assert result.n_violations == 1        # still counted and reported
+    assert result.passed                    # but green: the quirk is source-inherited

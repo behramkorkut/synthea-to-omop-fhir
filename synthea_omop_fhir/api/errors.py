@@ -57,6 +57,9 @@ def _json(status: int, code: str, message: str, detail: Any = None) -> JSONRespo
 
 
 async def api_error_handler(_request: Request, exc: APIError) -> JSONResponse:
+    from .metrics import ERRORS_TOTAL
+
+    ERRORS_TOTAL.labels(error_code=exc.code).inc()
     return _json(exc.status, exc.code, exc.message)
 
 
@@ -71,6 +74,9 @@ async def validation_error_handler(_request: Request, exc: Exception) -> JSONRes
 
 
 async def catchall_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    from .metrics import ERRORS_TOTAL
+
+    ERRORS_TOTAL.labels(error_code="internal_error").inc()
     logger.exception("Unhandled error on %s %s", request.method, request.url.path)
     return _json(500, "internal_error", "An unexpected error occurred. The incident has been logged.")
 

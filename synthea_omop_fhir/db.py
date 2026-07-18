@@ -34,12 +34,22 @@ class Connection:
         self._engine = engine
 
     def set_schema(self, name: str) -> None:
-        """Set the default schema/catalog for the session."""
+        """Set the default schema for the session.
+
+        `name` is an internal constant (never user input). We still validate it
+        as a SQL identifier and quote it, so this is not an injection surface.
+        """
+        if not name.isidentifier():
+            raise ValueError(f"Invalid schema name: {name!r}")
         if self._engine == "duckdb":
-            # DuckDB uses  catalog.schema
-            self._raw.execute(f"USE {name}.{name}")
+            # The DuckDB catalog is named after the *file* (e.g. a renamed
+            # WAREHOUSE_DB → different catalog), so we resolve it at runtime
+            # instead of assuming it equals the schema name.
+            catalog = self._raw.execute("SELECT current_database()").fetchone()[0]
+            self._raw.execute(f'USE "{catalog}"."{name}"')
         elif self._engine == "postgres":
-            self._raw.execute("SET search_path TO %(name)s", {"name": name})
+            # SET does not accept bound parameters for an identifier; quote it.
+            self._raw.execute(f'SET search_path TO "{name}"')
         else:
             raise ValueError(f"Unknown engine: {self._engine}")
 

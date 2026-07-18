@@ -34,7 +34,7 @@ from .dependencies import (
     warehouse_guard,
 )
 from .errors import register as register_errors
-from .metrics import ERRORS_TOTAL, REQUEST_COUNT, REQUEST_LATENCY, metrics_endpoint
+from .metrics import REQUEST_COUNT, REQUEST_LATENCY, metrics_endpoint
 
 # Configure logging at import time so uvicorn workers inherit it.
 setup_logging()
@@ -101,19 +101,10 @@ async def observability_middleware(request: Request, call_next):
     return response
 
 
-# ---------------------------------------------------------------------------
-# Error metrics hook
-# ---------------------------------------------------------------------------
-
-_original_api_error_handler = app.exception_handlers.get(type(None))  # placeholder
-
-# We attach a small wrapper to count errors by code.
-@app.exception_handler(Exception)
-async def _metrics_exception_handler(request: Request, exc: Exception) -> Response:
-    code = getattr(exc, "code", "internal_error")
-    ERRORS_TOTAL.labels(error_code=code).inc()
-    # Re-raise so the real catchall handler picks it up.
-    raise exc
+# Error metrics are incremented inside the catchall handlers (errors.py), which
+# return the structured JSON response. Registering a second `Exception` handler
+# here would OVERRIDE that catchall (Starlette keeps one handler per type) and,
+# by re-raising, bypass the structured error contract — so we don't.
 
 
 # ---------------------------------------------------------------------------

@@ -6,6 +6,14 @@ dist/
 wheels/
 *.egg-info
 
+# Test / coverage artifacts (generated)
+.coverage
+.coverage.*
+htmlcov/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
 # Virtual environments
 .venv
 
@@ -37,3 +45,4 @@ journaldebord.md
 audit_projet/
 audit_projet/* 
 progress.txt
+audit readmission-risk0ml/
