@@ -34,6 +34,7 @@ class FakeRaw:
 
     def fetchdf(self):
         import pandas as pd
+
         return pd.DataFrame(self._rows)
 
     def close(self):
@@ -81,7 +82,10 @@ def test_connection_fetchall():
     raw = FakeRaw()
     raw._rows = [(1, "male"), (2, "female")]
     con = Connection(raw, "duckdb")
-    assert con.execute("SELECT * FROM person").fetchall() == [(1, "male"), (2, "female")]
+    assert con.execute("SELECT * FROM person").fetchall() == [
+        (1, "male"),
+        (2, "female"),
+    ]
 
 
 def test_connection_fetchone():
@@ -105,6 +109,7 @@ def test_connection_close():
 
 
 # --- Factory ---
+
 
 def test_get_connection_returns_connection():
     """When db_engine is duckdb and warehouse exists, get_connection works."""
@@ -163,6 +168,7 @@ def test_get_connection_postgres_missing_dsn():
 
 # --- _PostgresConnection ---
 
+
 def test_postgres_connection_autocommit():
     raw = FakeRaw()
     raw.autocommit = False
@@ -190,6 +196,7 @@ def test_postgres_connection_fetchdf():
 
 # --- Connection.fetchdf ---
 
+
 def test_connection_fetchdf_duckdb():
     raw = FakeRaw()
     raw._rows = [(1, "male"), (2, "female")]
@@ -201,7 +208,10 @@ def test_connection_fetchdf_duckdb():
 def test_connection_fetchdf_postgres():
     raw = FakeRaw()
     raw._rows = [(1, "male"), (2, "female")]
-    raw._description = [type("Col", (), {"name": "id"})(), type("Col", (), {"name": "gender"})()]
+    raw._description = [
+        type("Col", (), {"name": "id"})(),
+        type("Col", (), {"name": "gender"})(),
+    ]
     con = Connection(raw, "postgres")
     df = con.execute("SELECT * FROM person").fetchdf()
     assert len(df) == 2

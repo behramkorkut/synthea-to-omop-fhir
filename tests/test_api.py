@@ -6,7 +6,12 @@ import json
 import pytest
 from fastapi.testclient import TestClient
 
-from synthea_omop_fhir.api.dependencies import paginator, rate_limit, require_api_key, warehouse_guard
+from synthea_omop_fhir.api.dependencies import (
+    paginator,
+    rate_limit,
+    require_api_key,
+    warehouse_guard,
+)
 from synthea_omop_fhir.api.errors import (
     UnauthorizedError,
     WarehouseNotFoundError,
@@ -23,11 +28,13 @@ client = TestClient(app)
 
 # --- S2 regression guard: structured JSON on any unhandled exception ---
 
+
 def test_unhandled_exception_returns_structured_json_500():
     """P1-B/S2: a generic exception must yield a STRUCTURED JSON 500 through the
     REAL app stack. This is the only test that would catch a regression where a
     second `Exception` handler overrides the catchall (the bug fixed in S2).
     """
+
     async def _boom() -> dict:
         raise RuntimeError("kaboom")
 
@@ -47,6 +54,7 @@ def test_unhandled_exception_returns_structured_json_500():
 
 
 # --- Meta endpoints (no warehouse) ---
+
 
 def test_health_returns_degraded_when_no_warehouse():
     """Health should degrade gracefully when warehouse is absent."""
@@ -70,6 +78,7 @@ def test_metrics_returns_prometheus():
 
 
 # --- Auth ---
+
 
 def test_require_api_key_disabled_when_empty():
     """When settings.api_key is empty, auth is disabled."""
@@ -112,6 +121,7 @@ def test_require_api_key_accepts_correct():
 
 # --- Rate limiting ---
 
+
 def test_rate_limit_disabled_when_zero():
     """Rate limit is disabled when RATE_LIMIT_PER_MINUTE <= 0."""
     from unittest.mock import Mock
@@ -123,6 +133,7 @@ def test_rate_limit_disabled_when_zero():
 
 # --- Warehouse guard ---
 
+
 def test_warehouse_guard_raises_when_missing():
     if settings.warehouse_db_abs.exists():
         pytest.skip("warehouse exists — cannot test missing guard")
@@ -131,6 +142,7 @@ def test_warehouse_guard_raises_when_missing():
 
 
 # --- Error handlers ---
+
 
 def test_api_error_json_shape():
     from synthea_omop_fhir.api.errors import _json
@@ -144,7 +156,15 @@ def test_api_error_json_shape():
 def test_api_error_handler_returns_json():
     from fastapi import Request
 
-    req = Request({"type": "http", "method": "GET", "url": "http://test/health", "path": "/", "headers": []})
+    req = Request(
+        {
+            "type": "http",
+            "method": "GET",
+            "url": "http://test/health",
+            "path": "/",
+            "headers": [],
+        }
+    )
     resp = asyncio.run(api_error_handler(req, UnauthorizedError()))
     assert resp.status_code == 401
     body = json.loads(resp.body)
@@ -154,7 +174,15 @@ def test_api_error_handler_returns_json():
 def test_catchall_handler_returns_500():
     from fastapi import Request
 
-    req = Request({"type": "http", "method": "GET", "url": "http://test/health", "path": "/", "headers": []})
+    req = Request(
+        {
+            "type": "http",
+            "method": "GET",
+            "url": "http://test/health",
+            "path": "/",
+            "headers": [],
+        }
+    )
     resp = asyncio.run(catchall_exception_handler(req, RuntimeError("boom")))
     assert resp.status_code == 500
     body = json.loads(resp.body)
@@ -165,12 +193,21 @@ def test_validation_error_handler_skips_non_validation():
     """validation_error_handler should re-raise non-RequestValidationError."""
     from fastapi import Request
 
-    req = Request({"type": "http", "method": "GET", "url": "http://test/health", "path": "/", "headers": []})
+    req = Request(
+        {
+            "type": "http",
+            "method": "GET",
+            "url": "http://test/health",
+            "path": "/",
+            "headers": [],
+        }
+    )
     with pytest.raises(ValueError):
         asyncio.run(validation_error_handler(req, ValueError("not a validation error")))
 
 
 # --- Pagination ---
+
 
 def test_paginator_defaults():
     p = paginator()

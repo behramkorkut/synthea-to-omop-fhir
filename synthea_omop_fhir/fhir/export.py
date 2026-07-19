@@ -48,11 +48,13 @@ def build_bundle(con, n_patients: int) -> dict:
     def add(resource: dict, resource_type: str) -> str:
         """Add a resource as a POST entry with a urn:uuid fullUrl; return the urn."""
         urn = f"urn:uuid:{uuid.uuid4()}"
-        entries.append({
-            "fullUrl": urn,
-            "resource": resource,
-            "request": {"method": "POST", "url": resource_type},
-        })
+        entries.append(
+            {
+                "fullUrl": urn,
+                "resource": resource,
+                "request": {"method": "POST", "url": resource_type},
+            }
+        )
         return urn
 
     # --- cohort: first N persons; keep person_id -> urn to link children --
@@ -65,11 +67,17 @@ def build_bundle(con, n_patients: int) -> dict:
 
     patient_urn: dict[int, str] = {}
     for pid, gender, y, m, d, src in persons:
-        patient_urn[pid] = add(_validated(Patient, {
-            "identifier": [{"system": "urn:synthea", "value": src}],
-            "gender": GENDER.get(gender, "unknown"),
-            "birthDate": f"{int(y):04d}-{int(m):02d}-{int(d):02d}",
-        }), "Patient")
+        patient_urn[pid] = add(
+            _validated(
+                Patient,
+                {
+                    "identifier": [{"system": "urn:synthea", "value": src}],
+                    "gender": GENDER.get(gender, "unknown"),
+                    "birthDate": f"{int(y):04d}-{int(m):02d}-{int(d):02d}",
+                },
+            ),
+            "Patient",
+        )
 
     if not ids:
         return {"resourceType": "Bundle", "type": "transaction", "entry": entries}
@@ -80,13 +88,21 @@ def build_bundle(con, n_patients: int) -> dict:
         "FROM visit_occurrence WHERE person_id IN (SELECT UNNEST(?))",
         [ids],
     ).fetchall():
-        add(_validated(Encounter, {
-            "status": "finished",
-            "class": {"system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
-                      "code": VISIT_CLASS.get(vc, "AMB")},
-            "subject": {"reference": patient_urn[pid]},
-            "period": {"start": _iso(start), "end": _iso(end)},
-        }), "Encounter")
+        add(
+            _validated(
+                Encounter,
+                {
+                    "status": "finished",
+                    "class": {
+                        "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+                        "code": VISIT_CLASS.get(vc, "AMB"),
+                    },
+                    "subject": {"reference": patient_urn[pid]},
+                    "period": {"start": _iso(start), "end": _iso(end)},
+                },
+            ),
+            "Encounter",
+        )
 
     # --- conditions (SNOMED source code) --------------------------------
     for pid, code, onset in con.execute(
@@ -94,14 +110,25 @@ def build_bundle(con, n_patients: int) -> dict:
         "FROM condition_occurrence WHERE person_id IN (SELECT UNNEST(?))",
         [ids],
     ).fetchall():
-        add(_validated(Condition, {
-            "clinicalStatus": {"coding": [{
-                "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
-                "code": "active"}]},
-            "code": {"coding": [{"system": SNOMED, "code": code}]},
-            "subject": {"reference": patient_urn[pid]},
-            "onsetDateTime": _iso(onset),
-        }), "Condition")
+        add(
+            _validated(
+                Condition,
+                {
+                    "clinicalStatus": {
+                        "coding": [
+                            {
+                                "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+                                "code": "active",
+                            }
+                        ]
+                    },
+                    "code": {"coding": [{"system": SNOMED, "code": code}]},
+                    "subject": {"reference": patient_urn[pid]},
+                    "onsetDateTime": _iso(onset),
+                },
+            ),
+            "Condition",
+        )
 
     # --- measurements -> Observation (LOINC source code) ----------------
     for pid, code, when, val, unit in con.execute(
@@ -110,13 +137,19 @@ def build_bundle(con, n_patients: int) -> dict:
         "WHERE person_id IN (SELECT UNNEST(?)) AND value_as_number IS NOT NULL LIMIT ?",
         [ids, MAX_OBSERVATIONS],
     ).fetchall():
-        add(_validated(Observation, {
-            "status": "final",
-            "code": {"coding": [{"system": LOINC, "code": code}]},
-            "subject": {"reference": patient_urn[pid]},
-            "effectiveDateTime": _iso(when),
-            "valueQuantity": {"value": float(val), "unit": unit or ""},
-        }), "Observation")
+        add(
+            _validated(
+                Observation,
+                {
+                    "status": "final",
+                    "code": {"coding": [{"system": LOINC, "code": code}]},
+                    "subject": {"reference": patient_urn[pid]},
+                    "effectiveDateTime": _iso(when),
+                    "valueQuantity": {"value": float(val), "unit": unit or ""},
+                },
+            ),
+            "Observation",
+        )
 
     return {"resourceType": "Bundle", "type": "transaction", "entry": entries}
 

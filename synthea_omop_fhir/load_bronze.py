@@ -15,10 +15,24 @@ from .sql import quote_ident
 
 # The Synthea tables we ingest (all of them, so nothing is lost for later use).
 SYNTHEA_TABLES = [
-    "patients", "encounters", "conditions", "medications", "observations",
-    "procedures", "immunizations", "allergies", "careplans", "devices",
-    "imaging_studies", "supplies", "organizations", "providers", "payers",
-    "payer_transitions", "claims", "claims_transactions",
+    "patients",
+    "encounters",
+    "conditions",
+    "medications",
+    "observations",
+    "procedures",
+    "immunizations",
+    "allergies",
+    "careplans",
+    "devices",
+    "imaging_studies",
+    "supplies",
+    "organizations",
+    "providers",
+    "payers",
+    "payer_transitions",
+    "claims",
+    "claims_transactions",
 ]
 
 
@@ -56,7 +70,9 @@ def main() -> None:
             "SELECT * FROM read_csv_auto(?, header = true, all_varchar = true);",
             [path.as_posix()],
         )
-        n = con.execute(f"SELECT count(*) FROM bronze.{quote_ident(name)};").fetchone()[0]
+        n = con.execute(f"SELECT count(*) FROM bronze.{quote_ident(name)};").fetchone()[
+            0
+        ]
         total += n
         print(f"  - bronze.{name:<20} {n:>8} rows")
 

@@ -31,14 +31,16 @@ def test_quality_report_summary():
 def test_person_schema_accepts_valid():
     import pandas as pd
 
-    df = pd.DataFrame({
-        "person_id": [1, 2],
-        "gender_concept_id": [8507, 8532],
-        "year_of_birth": [1980, 1990],
-        "month_of_birth": [1, 12],
-        "day_of_birth": [15, 30],
-        "person_source_value": ["p1", "p2"],
-    })
+    df = pd.DataFrame(
+        {
+            "person_id": [1, 2],
+            "gender_concept_id": [8507, 8532],
+            "year_of_birth": [1980, 1990],
+            "month_of_birth": [1, 12],
+            "day_of_birth": [15, 30],
+            "person_source_value": ["p1", "p2"],
+        }
+    )
     validated = PERSON_SCHEMA.validate(df, lazy=True)
     assert validated is not None
 
@@ -46,14 +48,16 @@ def test_person_schema_accepts_valid():
 def test_person_schema_rejects_invalid_gender():
     import pandas as pd
 
-    df = pd.DataFrame({
-        "person_id": [1],
-        "gender_concept_id": [9999],  # invalid
-        "year_of_birth": [1980],
-        "month_of_birth": [1],
-        "day_of_birth": [15],
-        "person_source_value": ["p1"],
-    })
+    df = pd.DataFrame(
+        {
+            "person_id": [1],
+            "gender_concept_id": [9999],  # invalid
+            "year_of_birth": [1980],
+            "month_of_birth": [1],
+            "day_of_birth": [15],
+            "person_source_value": ["p1"],
+        }
+    )
     with pytest.raises(pa.errors.SchemaErrors):
         PERSON_SCHEMA.validate(df, lazy=True)
 
@@ -81,19 +85,19 @@ def test_drug_end_check_ignores_source_inherited_incoherence():
     """S4: an end<start inherited from bronze source is reported but not a FAIL."""
     con = duckdb.connect(":memory:")
     con.execute("CREATE SCHEMA bronze")
-    con.execute(
-        "CREATE TABLE bronze.medications (start VARCHAR, stop VARCHAR)"
-    )
+    con.execute("CREATE TABLE bronze.medications (start VARCHAR, stop VARCHAR)")
     con.execute("INSERT INTO bronze.medications VALUES ('2020-01-10', '2020-01-05')")
     con.execute(
         "CREATE TABLE drug_exposure (drug_exposure_id INT, "
         "drug_exposure_start_date DATE, drug_exposure_end_date DATE)"
     )
-    con.execute("INSERT INTO drug_exposure VALUES (1, DATE '2020-01-10', DATE '2020-01-05')")
+    con.execute(
+        "INSERT INTO drug_exposure VALUES (1, DATE '2020-01-10', DATE '2020-01-05')"
+    )
     result = _check_drug_end_after_start(con)
     con.close()
-    assert result.n_violations == 1        # still counted and reported
-    assert result.passed                    # but green: the quirk is source-inherited
+    assert result.n_violations == 1  # still counted and reported
+    assert result.passed  # but green: the quirk is source-inherited
 
 
 def test_drug_end_check_fails_on_pipeline_introduced_incoherence():
@@ -109,7 +113,9 @@ def test_drug_end_check_fails_on_pipeline_introduced_incoherence():
         "drug_exposure_start_date DATE, drug_exposure_end_date DATE)"
     )
     # Sortie incohérente alors que la source ne l'était pas.
-    con.execute("INSERT INTO drug_exposure VALUES (1, DATE '2020-01-10', DATE '2020-01-05')")
+    con.execute(
+        "INSERT INTO drug_exposure VALUES (1, DATE '2020-01-10', DATE '2020-01-05')"
+    )
     result = _check_drug_end_after_start(con)
     con.close()
     assert result.n_violations == 1
@@ -123,7 +129,9 @@ def test_drug_end_check_fails_when_bronze_missing():
         "CREATE TABLE drug_exposure (drug_exposure_id INT, "
         "drug_exposure_start_date DATE, drug_exposure_end_date DATE)"
     )
-    con.execute("INSERT INTO drug_exposure VALUES (1, DATE '2020-01-10', DATE '2020-01-05')")
+    con.execute(
+        "INSERT INTO drug_exposure VALUES (1, DATE '2020-01-10', DATE '2020-01-05')"
+    )
     result = _check_drug_end_after_start(con)
     con.close()
     assert result.n_violations == 1

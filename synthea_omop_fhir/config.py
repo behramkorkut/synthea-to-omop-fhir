@@ -28,31 +28,31 @@ class Settings(BaseSettings):
     dbt_project_dir: Path = PROJECT_ROOT / "dbt" / "omop_cdm"
 
     # --- Data locations --------------------------------------------------
-    synthea_dir: Path = PROJECT_ROOT / "data" / "synthea"   # raw Synthea CSVs
-    fhir_out_dir: Path = PROJECT_ROOT / "data" / "fhir"     # exported FHIR bundles
+    synthea_dir: Path = PROJECT_ROOT / "data" / "synthea"  # raw Synthea CSVs
+    fhir_out_dir: Path = PROJECT_ROOT / "data" / "fhir"  # exported FHIR bundles
 
     # --- FHIR server (HAPI FHIR, run via Docker) -------------------------
     fhir_base_url: str = "http://localhost:8080/fhir"
 
     # --- API security ----------------------------------------------------
-    api_key: str = ""                         # empty = no auth (demo mode)
-    rate_limit_per_minute: int = 0             # 0 = disabled
+    api_key: str = ""  # empty = no auth (demo mode)
+    rate_limit_per_minute: int = 0  # 0 = disabled
 
     # --- LLM (governed clinical agent) ------------------------------------
-    llm_provider: str = "anthropic"            # anthropic | openai
+    llm_provider: str = "anthropic"  # anthropic | openai
     anthropic_api_key: str = ""
     anthropic_model: str = "claude-sonnet-4-6"
     openai_api_key: str = ""
     openai_model: str = "gpt-4o"
-    llm_base_url: str = ""                     # for local / proxy endpoints
+    llm_base_url: str = ""  # for local / proxy endpoints
 
     # --- Observability -----------------------------------------------------
-    log_level: str = "INFO"                    # DEBUG | INFO | WARNING | ERROR
-    log_format: str = "text"                   # text | json
+    log_level: str = "INFO"  # DEBUG | INFO | WARNING | ERROR
+    log_format: str = "text"  # text | json
 
     # --- Database engine ---------------------------------------------------
-    db_engine: str = "duckdb"                  # duckdb | postgres
-    postgres_dsn: str = ""                   # postgresql://user:pass@host:5432/db
+    db_engine: str = "duckdb"  # duckdb | postgres
+    postgres_dsn: str = ""  # postgresql://user:pass@host:5432/db
 
     @property
     def warehouse_db_abs(self) -> Path:

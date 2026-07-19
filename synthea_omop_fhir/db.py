@@ -120,8 +120,6 @@ def get_connection() -> Connection:
 
         dsn = settings.postgres_dsn
         if not dsn:
-            raise RuntimeError(
-                "POSTGRES_DSN is not set. Add it to your .env."
-            )
+            raise RuntimeError("POSTGRES_DSN is not set. Add it to your .env.")
         return _PostgresConnection(psycopg.connect(dsn))
     raise ValueError(f"Unsupported DB_ENGINE: {engine}")

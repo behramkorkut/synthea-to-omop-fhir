@@ -48,9 +48,16 @@ with left:
         c = cohort(term)
         st.metric(f'Patients with "{term}"', c["patient_count"])
         if c["by_gender"]:
-            st.bar_chart(pd.DataFrame(
-                {"gender": list(c["by_gender"]), "patients": list(c["by_gender"].values())}
-            ), x="gender", y="patients")
+            st.bar_chart(
+                pd.DataFrame(
+                    {
+                        "gender": list(c["by_gender"]),
+                        "patients": list(c["by_gender"].values()),
+                    }
+                ),
+                x="gender",
+                y="patients",
+            )
 
     st.subheader("Measurement summary")
     mterm = st.text_input("Measurement contains…", value="Hemoglobin A1c")
@@ -58,9 +65,9 @@ with left:
         m = measurement(mterm)
         if m["n"]:
             a, b, cc = st.columns(3)
-            a.metric("n", f'{m["n"]:,}')
-            b.metric("mean", f'{m["mean"]} {m["unit"] or ""}')
-            cc.metric("range", f'{m["min"]}–{m["max"]}')
+            a.metric("n", f"{m['n']:,}")
+            b.metric("mean", f"{m['mean']} {m['unit'] or ''}")
+            cc.metric("range", f"{m['min']}–{m['max']}")
         else:
             st.info("No matching measurement.")
 

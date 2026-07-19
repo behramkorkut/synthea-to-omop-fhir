@@ -45,9 +45,17 @@ class _FakeMessages:
     def create(self, **_):
         self.n += 1
         if self.n == 1:
-            tu = NS(type="tool_use", name="condition_prevalence", id="t1", input={"top_n": 3})
+            tu = NS(
+                type="tool_use",
+                name="condition_prevalence",
+                id="t1",
+                input={"top_n": 3},
+            )
             return NS(stop_reason="tool_use", content=[tu])
-        return NS(stop_reason="end_turn", content=[NS(type="text", text="Top conditions listed.")])
+        return NS(
+            stop_reason="end_turn",
+            content=[NS(type="text", text="Top conditions listed.")],
+        )
 
 
 class _FakeClient:

@@ -42,9 +42,7 @@ def load_stcm(con: duckdb.DuckDBPyConnection, stcm_path: Path) -> int:
         SELECT * FROM read_csv_auto('{stcm_path.as_posix()}')
         """
     )
-    result = con.execute(
-        "SELECT COUNT(*) FROM source_to_concept_map"
-    ).fetchone()
+    result = con.execute("SELECT COUNT(*) FROM source_to_concept_map").fetchone()
     count = result[0] if result else 0
     logger.info("Loaded %d rows from %s", count, stcm_path)
     return count
@@ -67,9 +65,7 @@ def apply_domain(
       AND m.invalid_reason IS NULL
     """
     con.execute(query)
-    result = con.execute(
-        "SELECT changes()"
-    ).fetchone()
+    result = con.execute("SELECT changes()").fetchone()
     updated = result[0] if result else 0
     logger.info("Updated %d rows in %s", updated, table)
     return updated
@@ -79,9 +75,7 @@ def coverage_report(con: duckdb.DuckDBPyConnection) -> dict[str, float]:
     """Return unmapped ratio per domain table."""
     ratios: dict[str, float] = {}
     for table, (_, concept_col) in DOMAINS.items():
-        total = con.execute(
-            f"SELECT COUNT(*) FROM {table}"
-        ).fetchone()[0]
+        total = con.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
         unmapped = con.execute(
             f"SELECT COUNT(*) FROM {table} WHERE {concept_col} = 0"
         ).fetchone()[0]
@@ -89,7 +83,11 @@ def coverage_report(con: duckdb.DuckDBPyConnection) -> dict[str, float]:
         ratios[table] = ratio
         logger.info(
             "%s.%s: %d/%d unmapped (%.1f%%)",
-            table, concept_col, unmapped, total, ratio,
+            table,
+            concept_col,
+            unmapped,
+            total,
+            ratio,
         )
     return ratios
 

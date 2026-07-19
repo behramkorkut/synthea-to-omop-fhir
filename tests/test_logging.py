@@ -10,7 +10,13 @@ def test_json_formatter_outputs_valid_json():
 
     formatter = _JsonFormatter()
     record = logging.LogRecord(
-        name="test", level=logging.INFO, pathname="", lineno=0, msg="hello", args=(), exc_info=None
+        name="test",
+        level=logging.INFO,
+        pathname="",
+        lineno=0,
+        msg="hello",
+        args=(),
+        exc_info=None,
     )
     line = formatter.format(record)
     parsed = json.loads(line)
@@ -24,7 +30,13 @@ def test_json_formatter_includes_correlation_id():
 
     formatter = _JsonFormatter()
     record = logging.LogRecord(
-        name="test", level=logging.WARNING, pathname="", lineno=0, msg="warn", args=(), exc_info=None
+        name="test",
+        level=logging.WARNING,
+        pathname="",
+        lineno=0,
+        msg="warn",
+        args=(),
+        exc_info=None,
     )
     record.correlation_id = "abc-123"
     line = formatter.format(record)

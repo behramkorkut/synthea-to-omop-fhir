@@ -23,7 +23,9 @@ def _wait_ready(base: str, attempts: int = 40, delay: int = 3) -> None:
     meta = base.rstrip("/") + "/metadata"
     for i in range(1, attempts + 1):
         try:
-            req = urllib.request.Request(meta, headers={"Accept": "application/fhir+json"})
+            req = urllib.request.Request(
+                meta, headers={"Accept": "application/fhir+json"}
+            )
             with urllib.request.urlopen(req, timeout=10) as r:
                 if r.status == 200:
                     print(f"FHIR server ready ({meta}).")
@@ -41,7 +43,9 @@ def _wait_ready(base: str, attempts: int = 40, delay: int = 3) -> None:
 def main() -> None:
     bundle_path = settings.fhir_out_dir / "bundle.json"
     if not bundle_path.exists():
-        raise FileNotFoundError(f"{bundle_path} not found — run `make fhir-export` first.")
+        raise FileNotFoundError(
+            f"{bundle_path} not found — run `make fhir-export` first."
+        )
 
     _wait_ready(settings.fhir_base_url)
 
@@ -55,7 +59,9 @@ def main() -> None:
             "Accept": "application/fhir+json",
         },
     )
-    print(f"POSTing transaction bundle ({len(data) // 1024} KB) -> {settings.fhir_base_url}")
+    print(
+        f"POSTing transaction bundle ({len(data) // 1024} KB) -> {settings.fhir_base_url}"
+    )
     try:
         with urllib.request.urlopen(req, timeout=600) as resp:
             body = json.loads(resp.read())

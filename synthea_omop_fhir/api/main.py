@@ -56,6 +56,7 @@ register_errors(app)
 # Middleware: correlation ID + structured request logging + metrics
 # ---------------------------------------------------------------------------
 
+
 @app.middleware("http")
 async def observability_middleware(request: Request, call_next):
     cid = request.headers.get("X-Correlation-Id", str(uuid.uuid4()))
@@ -68,24 +69,16 @@ async def observability_middleware(request: Request, call_next):
         # Ensure metrics are recorded even for unhandled exceptions.
         elapsed = time.time() - start
         path = request.url.path
-        REQUEST_COUNT.labels(
-            method=request.method, endpoint=path, status="500"
-        ).inc()
-        REQUEST_LATENCY.labels(
-            method=request.method, endpoint=path
-        ).observe(elapsed)
+        REQUEST_COUNT.labels(method=request.method, endpoint=path, status="500").inc()
+        REQUEST_LATENCY.labels(method=request.method, endpoint=path).observe(elapsed)
         raise
 
     elapsed = time.time() - start
     path = request.url.path
     status = str(response.status_code)
 
-    REQUEST_COUNT.labels(
-        method=request.method, endpoint=path, status=status
-    ).inc()
-    REQUEST_LATENCY.labels(
-        method=request.method, endpoint=path
-    ).observe(elapsed)
+    REQUEST_COUNT.labels(method=request.method, endpoint=path, status=status).inc()
+    REQUEST_LATENCY.labels(method=request.method, endpoint=path).observe(elapsed)
 
     extra = {"correlation_id": cid}
     logger.info(
@@ -110,6 +103,7 @@ async def observability_middleware(request: Request, call_next):
 # ---------------------------------------------------------------------------
 # Meta
 # ---------------------------------------------------------------------------
+
 
 @app.get("/health", tags=["meta"])
 def health() -> dict:
@@ -149,6 +143,7 @@ def metrics() -> Response:
 # ---------------------------------------------------------------------------
 # Cohort (governed operations only)
 # ---------------------------------------------------------------------------
+
 
 @app.get("/cohort/prevalence", tags=["cohort"])
 def prevalence(
@@ -197,6 +192,7 @@ def measurement(
 # ---------------------------------------------------------------------------
 # Quality
 # ---------------------------------------------------------------------------
+
 
 @app.get("/quality", tags=["quality"])
 def quality(

@@ -68,7 +68,9 @@ async def validation_error_handler(_request: Request, exc: Exception) -> JSONRes
     from fastapi.exceptions import RequestValidationError
 
     if isinstance(exc, RequestValidationError):
-        errors = [{"loc": e.get("loc", []), "msg": e.get("msg", "")} for e in exc.errors()]
+        errors = [
+            {"loc": e.get("loc", []), "msg": e.get("msg", "")} for e in exc.errors()
+        ]
         return _json(422, "validation_error", "Request validation failed.", errors)
     raise exc
 
@@ -78,7 +80,11 @@ async def catchall_exception_handler(request: Request, exc: Exception) -> JSONRe
 
     ERRORS_TOTAL.labels(error_code="internal_error").inc()
     logger.exception("Unhandled error on %s %s", request.method, request.url.path)
-    return _json(500, "internal_error", "An unexpected error occurred. The incident has been logged.")
+    return _json(
+        500,
+        "internal_error",
+        "An unexpected error occurred. The incident has been logged.",
+    )
 
 
 def register(app) -> None:

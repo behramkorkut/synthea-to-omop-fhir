@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 # Auth
 # ---------------------------------------------------------------------------
 
+
 def require_api_key(x_api_key: Annotated[str | None, Header()] = None) -> None:
     """Reject if an API key is configured and the header is missing/invalid."""
     expected = settings.api_key
@@ -26,6 +27,7 @@ def require_api_key(x_api_key: Annotated[str | None, Header()] = None) -> None:
     if x_api_key is None:
         raise UnauthorizedError()
     import secrets
+
     if not secrets.compare_digest(x_api_key, expected):
         raise UnauthorizedError()
 
@@ -33,6 +35,7 @@ def require_api_key(x_api_key: Annotated[str | None, Header()] = None) -> None:
 # ---------------------------------------------------------------------------
 # Pagination
 # ---------------------------------------------------------------------------
+
 
 class Pagination:
     def __init__(self, offset: int = 0, limit: int = 100) -> None:
@@ -74,6 +77,7 @@ def rate_limit(request: Request) -> None:
 # ---------------------------------------------------------------------------
 # Warehouse guard
 # ---------------------------------------------------------------------------
+
 
 def warehouse_guard() -> None:
     if not settings.warehouse_db_abs.exists():

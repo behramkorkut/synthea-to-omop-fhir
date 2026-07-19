@@ -15,16 +15,20 @@ def test_validated_patient_is_r4b_dict():
 
 
 def test_validated_observation_value_quantity():
-    d = _validated(Observation, {
-        "status": "final",
-        "code": {"coding": [{"system": "http://loinc.org", "code": "8867-4"}]},
-        "subject": {"reference": "urn:uuid:abc"},
-        "valueQuantity": {"value": 72, "unit": "/min"},
-    })
+    d = _validated(
+        Observation,
+        {
+            "status": "final",
+            "code": {"coding": [{"system": "http://loinc.org", "code": "8867-4"}]},
+            "subject": {"reference": "urn:uuid:abc"},
+            "valueQuantity": {"value": 72, "unit": "/min"},
+        },
+    )
     assert d["valueQuantity"]["value"] == 72
 
 
 # --- _iso helper ---
+
 
 def test_iso_with_date():
     assert _iso(date(1980, 1, 15)) == "1980-01-15"
@@ -39,6 +43,7 @@ def test_iso_with_none():
 
 
 # --- build_bundle with mock connection ---
+
 
 class FakeConnection:
     def __init__(self, persons=None, visits=None, conditions=None, measurements=None):
@@ -99,7 +104,9 @@ def test_build_bundle_patient_count_matches_cohort():
         measurements=[],
     )
     bundle = build_bundle(con, 2)
-    patients = [e for e in bundle["entry"] if e["resource"]["resourceType"] == "Patient"]
+    patients = [
+        e for e in bundle["entry"] if e["resource"]["resourceType"] == "Patient"
+    ]
     assert len(patients) == 2
 
 
@@ -111,7 +118,9 @@ def test_build_bundle_links_encounter_to_patient():
         measurements=[],
     )
     bundle = build_bundle(con, 1)
-    encounters = [e for e in bundle["entry"] if e["resource"]["resourceType"] == "Encounter"]
+    encounters = [
+        e for e in bundle["entry"] if e["resource"]["resourceType"] == "Encounter"
+    ]
     assert len(encounters) == 1
     assert encounters[0]["resource"]["status"] == "finished"
     # The encounter references the patient via the generated urn:uuid
@@ -126,7 +135,9 @@ def test_build_bundle_with_condition():
         measurements=[],
     )
     bundle = build_bundle(con, 1)
-    conditions = [e for e in bundle["entry"] if e["resource"]["resourceType"] == "Condition"]
+    conditions = [
+        e for e in bundle["entry"] if e["resource"]["resourceType"] == "Condition"
+    ]
     assert len(conditions) == 1
     assert conditions[0]["resource"]["code"]["coding"][0]["code"] == "C001"
 
@@ -148,6 +159,7 @@ def test_build_bundle_with_observation():
 def test_max_observations_constant():
     """MAX_OBSERVATIONS should be 500 to keep bundles small."""
     from synthea_omop_fhir.fhir.export import MAX_OBSERVATIONS
+
     assert MAX_OBSERVATIONS == 500
 
 

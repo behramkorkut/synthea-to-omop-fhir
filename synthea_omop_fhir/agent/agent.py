@@ -46,7 +46,7 @@ TOOLS = [
     {
         "name": "cohort_by_condition",
         "description": "Count of distinct patients having a condition whose label "
-                       "matches a term (e.g. 'breast cancer'), broken down by gender.",
+        "matches a term (e.g. 'breast cancer'), broken down by gender.",
         "input_schema": {
             "type": "object",
             "properties": {"term": {"type": "string", "description": "condition term"}},
@@ -64,10 +64,12 @@ TOOLS = [
     {
         "name": "measurement_summary",
         "description": "Summary stats (n, mean, min, max, unit) for measurements "
-                       "whose label matches a term (e.g. 'HbA1c', 'Body Height').",
+        "whose label matches a term (e.g. 'HbA1c', 'Body Height').",
         "input_schema": {
             "type": "object",
-            "properties": {"term": {"type": "string", "description": "measurement term"}},
+            "properties": {
+                "term": {"type": "string", "description": "measurement term"}
+            },
             "required": ["term"],
         },
     },
@@ -128,12 +130,14 @@ class ClinicalCohortAgent:
             if resp.text:
                 assistant_content.append({"type": "text", "text": resp.text})
             for tc in resp.tool_calls:
-                assistant_content.append({
-                    "type": "tool_use",
-                    "id": tc.id,
-                    "name": tc.name,
-                    "input": tc.arguments,
-                })
+                assistant_content.append(
+                    {
+                        "type": "tool_use",
+                        "id": tc.id,
+                        "name": tc.name,
+                        "input": tc.arguments,
+                    }
+                )
             messages.append({"role": "assistant", "content": assistant_content})
 
             tool_results: list[dict] = []
@@ -145,12 +149,14 @@ class ClinicalCohortAgent:
                 except Exception as e:  # noqa: BLE001
                     content, is_error = f"Error: {e}", True
                     result.steps.append(f"ERROR {tc.name}({tc.arguments}) -> {e}")
-                tool_results.append({
-                    "type": "tool_result",
-                    "tool_use_id": tc.id,
-                    "content": content,
-                    "is_error": is_error,
-                })
+                tool_results.append(
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": tc.id,
+                        "content": content,
+                        "is_error": is_error,
+                    }
+                )
             messages.append({"role": "user", "content": tool_results})
 
         result.answer = "Stopped after too many steps."

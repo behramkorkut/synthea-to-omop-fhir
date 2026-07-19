@@ -46,10 +46,16 @@ class QualityReport:
 PERSON_SCHEMA = DataFrameSchema(
     {
         "person_id": Column(int, nullable=False, unique=True),
-        "gender_concept_id": Column(int, nullable=False, checks=pa.Check.isin([8507, 8532, 0])),
+        "gender_concept_id": Column(
+            int, nullable=False, checks=pa.Check.isin([8507, 8532, 0])
+        ),
         "year_of_birth": Column(int, nullable=False),
-        "month_of_birth": Column(int, nullable=True, checks=pa.Check.isin(list(range(1, 13)))),
-        "day_of_birth": Column(int, nullable=True, checks=pa.Check.isin(list(range(1, 32)))),
+        "month_of_birth": Column(
+            int, nullable=True, checks=pa.Check.isin(list(range(1, 13)))
+        ),
+        "day_of_birth": Column(
+            int, nullable=True, checks=pa.Check.isin(list(range(1, 32)))
+        ),
         "person_source_value": Column(str, nullable=False),
     },
     strict=False,
@@ -60,7 +66,9 @@ VISIT_SCHEMA = DataFrameSchema(
     {
         "visit_occurrence_id": Column(int, nullable=False, unique=True),
         "person_id": Column(int, nullable=False),
-        "visit_concept_id": Column(int, nullable=False, checks=pa.Check.isin([9201, 9202, 9203])),
+        "visit_concept_id": Column(
+            int, nullable=False, checks=pa.Check.isin([9201, 9202, 9203])
+        ),
         "visit_start_date": Column(pa.Date, nullable=False),
         "visit_end_date": Column(pa.Date, nullable=True),
     },
@@ -113,6 +121,7 @@ SCHEMAS: dict[str, DataFrameSchema] = {
 # ---------------------------------------------------------------------------
 # Custom coherence checks (beyond Pandera schemas)
 # ---------------------------------------------------------------------------
+
 
 def _check_death_after_birth(con: Any) -> CheckResult:
     rows = con.execute(
@@ -196,11 +205,11 @@ def _check_drug_end_after_start(con: Any) -> CheckResult:
 # scores, DALY/QALY, urine dipstick "presence" flags…), so a blanket
 # "value ≤ 0 is a violation" rule produces thousands of false positives.
 _POSITIVE_MEASUREMENT_CODES = (
-    "8302-2",   # Body height
+    "8302-2",  # Body height
     "29463-7",  # Body weight
     "39156-5",  # Body mass index (BMI)
-    "8310-5",   # Body temperature
-    "8867-4",   # Heart rate
+    "8310-5",  # Body temperature
+    "8867-4",  # Heart rate
 )
 
 
@@ -226,6 +235,7 @@ def _check_measurement_positive_value(con: Any) -> CheckResult:
 # ---------------------------------------------------------------------------
 # Mapping coverage check (concept_id = 0)
 # ---------------------------------------------------------------------------
+
 
 def _check_mapping_coverage(con: Any) -> CheckResult:
     """Report % of records with unmapped concept_id (= 0)."""
@@ -260,13 +270,15 @@ def _check_mapping_coverage(con: Any) -> CheckResult:
         table="omop",
         passed=True,  # informational
         n_violations=total_zero,
-        details=details + [f"OVERALL unmapped: {total_zero}/{total_rows} ({overall_pct:.1f}%)"],
+        details=details
+        + [f"OVERALL unmapped: {total_zero}/{total_rows} ({overall_pct:.1f}%)"],
     )
 
 
 # ---------------------------------------------------------------------------
 # Main runner
 # ---------------------------------------------------------------------------
+
 
 def _load_df(con, table: str) -> pd.DataFrame:
     return con.execute(f"SELECT * FROM {table}").fetchdf()
@@ -275,7 +287,9 @@ def _load_df(con, table: str) -> pd.DataFrame:
 def run() -> QualityReport:
     db_path = settings.warehouse_db_abs
     if not db_path.exists():
-        raise FileNotFoundError(f"OMOP warehouse not found at {db_path}. Run `make omop` first.")
+        raise FileNotFoundError(
+            f"OMOP warehouse not found at {db_path}. Run `make omop` first."
+        )
 
     con = get_connection()
     con.set_schema("omop")
@@ -287,21 +301,44 @@ def run() -> QualityReport:
         try:
             df = _load_df(con, table)
             if df.empty:
-                checks.append(CheckResult(name=f"schema_{table}", table=table, passed=True, details=["empty table"]))
+                checks.append(
+                    CheckResult(
+                        name=f"schema_{table}",
+                        table=table,
+                        passed=True,
+                        details=["empty table"],
+                    )
+                )
                 continue
             schema.validate(df, lazy=True)
-            checks.append(CheckResult(name=f"schema_{table}", table=table, passed=True, n_violations=0))
+            checks.append(
+                CheckResult(
+                    name=f"schema_{table}", table=table, passed=True, n_violations=0
+                )
+            )
         except pa.errors.SchemaErrors as exc:
             details = []
             for err in exc.schema_errors[:5]:
                 msg = getattr(err, "error", str(err))
                 details.append(msg)
-            checks.append(CheckResult(
-                name=f"schema_{table}", table=table, passed=False,
-                n_violations=len(exc.schema_errors), details=details,
-            ))
+            checks.append(
+                CheckResult(
+                    name=f"schema_{table}",
+                    table=table,
+                    passed=False,
+                    n_violations=len(exc.schema_errors),
+                    details=details,
+                )
+            )
         except Exception as exc:
-            checks.append(CheckResult(name=f"schema_{table}", table=table, passed=False, details=[str(exc)]))
+            checks.append(
+                CheckResult(
+                    name=f"schema_{table}",
+                    table=table,
+                    passed=False,
+                    details=[str(exc)],
+                )
+            )
 
     # --- Coherence checks ---
     checks.append(_check_death_after_birth(con))
