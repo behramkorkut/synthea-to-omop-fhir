@@ -6,7 +6,7 @@
 > Zero real data, zero RGPD.
 
 ![CI](https://img.shields.io/badge/CI-GitHub_Actions-2088FF?logo=githubactions&logoColor=white)
-![tests](https://img.shields.io/badge/tests-64_pytest_+_41_dbt-brightgreen?logo=pytest&logoColor=white)
+![tests](https://img.shields.io/badge/tests-82_pytest_+_41_dbt-brightgreen?logo=pytest&logoColor=white)
 ![Python](https://img.shields.io/badge/Python-3.11-3776AB?logo=python&logoColor=white)
 ![OMOP](https://img.shields.io/badge/OMOP_CDM-OHDSI-005A9C)
 ![FHIR](https://img.shields.io/badge/FHIR-HL7_R4B-E4002B)
@@ -16,7 +16,7 @@
 Portfolio project demonstrating **health-data engineering** on the two standards
 that matter in a French *Entrepôt de Données de Santé* (EDS): **OMOP CDM** (OHDSI,
 reproducible research) and **FHIR** (HL7, interoperability) — built on **Synthea**
-synthetic patients, with the software rigor (tests, CI, containers, 61% coverage),
+synthetic patients, with the software rigor (tests, CI, containers, 75% coverage),
 **observability** (Prometheus metrics, structured JSON logs, correlation IDs), and the
 **governance/sovereignty** awareness (RGPD, HDS, SecNumCloud) health teams require.
 
@@ -68,10 +68,30 @@ The project was hardened through an incremental production-readiness plan:
    settings.
 7. **Sovereign infrastructure** — Terraform for OVH Cloud (instance, network, managed
    PostgreSQL) + `docker-compose.prod.yml` for the full stack (API + DB + HAPI + nginx).
-8. **Test coverage** — 61% pytest coverage with unit tests for `api/`, `db.py`,
-   `fhir/export.py`, `quality/`, `agent/llm.py`, and error handlers.
+8. **Test coverage** — 75% pytest coverage with unit tests for `api/`, `db.py`,
+   `fhir/export.py` + `fhir/push.py` (98%), `load_bronze.py` (97%), `quality/`,
+   `agent/` (incl. the CLI at 93%), and error handlers.
 
 See `audit_projet/progress.txt` for the full audit trail.
+
+## Audit & quality
+
+The project went through a **full independent audit loop** — code review plus
+**real execution** (adversarial probes on every guard), then verified fixes and a
+final independent re-check. **Final grade: 9/10.**
+
+| Guarantee | Verified by execution |
+|---|---|
+| No free-form SQL on patient data — parameterized queries (`UNNEST(?)`), identifiers validated + quoted (`quote_ident`), injection attempts rejected | ✅ dedicated tests |
+| Structured JSON error contract on **any** unhandled exception, end-to-end through the real app stack | ✅ dedicated tests |
+| API-key auth (`secrets.compare_digest`) + per-IP sliding-window rate limit | ✅ dedicated tests |
+| Data-quality checks **fail when they should** (pipeline-introduced incoherence, missing bronze schema, negative physical measurement) | ✅ negative edge cases |
+| Warehouse file renamable/movable (`WAREHOUSE_DB`) — no `CatalogException` | ✅ reproduction probe |
+| **82 pytest + 41 dbt tests**, 75% coverage, `mypy`, `ruff` (lint + format) | ✅ all enforced in CI |
+
+> Known, documented limits: the real LLM SDK branches are mocked out in tests
+> (`agent/llm.py` ~40% covered), and upstream deprecation warnings (pandera,
+> Starlette TestClient) are tracked for future cleanup.
 
 ## Governed clinical AI
 
@@ -134,14 +154,15 @@ while showcasing governed RAG on a real domain problem.
 
 ## Testing & quality
 
-- **pytest** (61% coverage): agent allow-list, tool rejection, FHIR R4B validation,
+- **pytest** (75% coverage): agent allow-list, tool rejection, FHIR R4B validation,
   cohort/agent integration, API auth & rate-limiting, DB factory, error handlers,
-  Pandera schema validation, and LLM factory (they *skip* cleanly if the warehouse
-  isn't built).
+  Pandera schema validation, LLM factory, FHIR push (mocked network), Bronze
+  ingestion (tiny synthetic CSVs), and agent CLI (they *skip* cleanly if the
+  warehouse isn't built).
 - **41 dbt tests**: primary keys, referential integrity to `person`, accepted
   concept values.
 - **Pandera DQD-like checks**: schema, temporal coherence, mapping coverage.
-- CI runs `ruff check .` + `pytest` on every push.
+- CI runs `ruff check .` + `ruff format --check .` + `mypy` + `pytest` on every push.
 
 ## Governance & sovereignty
 
@@ -162,7 +183,7 @@ aligned with the French HDS → sovereign-cloud shift. See
 - [x] Docker + CI + governance & sovereign-deployment docs
 - [x] Production-ready hardening (8-step upgrade: SQL injection fix, DQD module,
   robust API, LLM-agnostic agent, observability, demo/prod config, Terraform infra,
-  61% test coverage)
+  75% test coverage)
 - [x] LLM/RAG concept-mapping assistant — **réalisé par le projet frère**
   [`governed-omop-rag`](https://github.com/behramkorkut/governed-omop-rag)
   (RAG agentique gouverné, human-in-the-loop, 92 % coverage). Boucle de
@@ -173,7 +194,7 @@ aligned with the French HDS → sovereign-cloud shift. See
 Health-data engineering (Synthea → **OMOP CDM** → **FHIR**), data quality (dbt +
 Pandera DQD + mapping coverage), **safe agentic AI on patient data** (governed
 cohort ops, no SQL), plus solid practices: uv, Docker/Colima, self-documenting
-Makefile, CI, a tested codebase (61% coverage), structured observability, and a
+Makefile, CI, a tested codebase (75% coverage), structured observability, and a
 **sovereign** deployment path.
 
 ## License
